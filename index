@@ -83,11 +83,29 @@
             font-size: 14px;
         }
         .compliant-row {
-            display: none; 
+            display: none; /* Compliant cells remain hidden */
         }
         .status-msg {
-            margin-top: 10px;
+            margin-top: 15px;
             font-weight: bold;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success-banner {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error-banner {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info-banner {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
         }
     </style>
 </head>
@@ -99,7 +117,7 @@
     <div class="file-section">
         <label for="guidelineFile">1. Upload Guidelines Document (.txt, .docx, or .pdf):</label>
         <input type="file" id="guidelineFile" accept=".txt,.docx,.pdf">
-        <p style="font-size: 12px; color: #666;">Ensure your document contains clear keywords like 'Max CPL: 42', 'Max CPS: 17', 'Max Lines: 2', 'Min Duration: 1', etc.</p>
+        <p style="font-size: 12px; color: #666;">Keywords required: 'Max CPL:', 'Max CPS:', 'Max Lines:', 'Min Duration:', etc.</p>
     </div>
 
     <div class="file-section">
@@ -131,8 +149,12 @@
 </div>
 
 <script>
-    // Configure PDF.js worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    // Initialize PDF.js properly to avoid local CORS issues
+    if (typeof pdfjsLib !== 'undefined') {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    } else {
+        showStatus("Warning: PDF parser failed to load. PDF guidelines may not work.", "error-banner");
+    }
 
     let activeGuidelines = {
         maxCPL: 42,
@@ -142,21 +164,28 @@
         maxDuration: 7.0
     };
 
+    function showStatus(message, className) {
+        const statusMsg = document.getElementById('statusMsg');
+        statusMsg.textContent = message;
+        statusMsg.className = 'status-msg ' + className;
+        statusMsg.style.display = 'block';
+    }
+
     document.getElementById('validateBtn').addEventListener('click', async () => {
         const guidelineFile = document.getElementById('guidelineFile').files[0];
         const ooonaFile = document.getElementById('ooonaFile').files[0];
-        const statusMsg = document.getElementById('statusMsg');
+        
+        document.getElementById('resultTable').style.display = 'none';
 
         if (!ooonaFile) {
-            statusMsg.textContent = "Please upload an .ooona file.";
-            statusMsg.style.color = "#d9534f";
+            showStatus("Please upload an .ooona subtitle file first.", "error-banner");
             return;
         }
 
-        statusMsg.textContent = "Processing files...";
-        statusMsg.style.color = "#0056b3";
+        showStatus("Processing files...", "info-banner");
 
         try {
+            // Process Guidelines
             if (guidelineFile) {
                 const ext = guidelineFile.name.split('.').pop().toLowerCase();
                 let textContent = "";
@@ -175,18 +204,22 @@
             }
             displayParsedGuidelines();
 
+            // Process Subtitles
             const ooonaContent = await readFileAsText(ooonaFile);
             const subtitles = parseOoonaContent(ooonaContent);
-
-            renderValidation(subtitles);
             
-            statusMsg.textContent = "Validation complete. Showing only cells with errors.";
-            statusMsg.style.color = "#28a745";
+            // Render Validation
+            const errorCount = renderValidation(subtitles);
+            
+            if (errorCount === 0) {
+                showStatus("✅ Validation complete! All subtitle cells are compliant. No errors found.", "success-banner");
+            } else {
+                showStatus(`⚠️ Validation complete. Found errors in ${errorCount} cells. Compliant cells are hidden.`, "error-banner");
+            }
 
         } catch (error) {
             console.error(error);
-            statusMsg.textContent = "Error during processing: " + error.message;
-            statusMsg.style.color = "#d9534f";
+            showStatus("Error: " + error.message, "error-banner");
         }
     });
 
@@ -195,7 +228,7 @@
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = e => resolve(e.target.result);
-            reader.onerror = e => reject(e);
+            reader.onerror = e => reject(new Error("Failed to read the file as text."));
             reader.readAsText(file);
         });
     }
@@ -204,13 +237,14 @@
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = e => resolve(e.target.result);
-            reader.onerror = e => reject(e);
+            reader.onerror = e => reject(new Error("Failed to read the file data."));
             reader.readAsArrayBuffer(file);
         });
     }
 
     // --- PDF Parsing Logic ---
     async function extractTextFromPDF(arrayBuffer) {
+        if (typeof pdfjsLib === 'undefined') throw new Error("PDF library is not loaded.");
         const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
         let text = "";
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -259,12 +293,12 @@
         try {
             data = JSON.parse(jsonString);
         } catch (e) {
-            throw new Error("The .ooona file does not appear to be valid JSON. There is insufficient evidence to parse this format.");
+            throw new Error("The .ooona file does not appear to be standard JSON. The data structure might be corrupted or in an unexpected format.");
         }
 
         let subtitleArray = findSubtitleArray(data);
         if (!subtitleArray || subtitleArray.length === 0) {
-            throw new Error("Could not locate subtitle objects within the .ooona structure.");
+            throw new Error("Could not locate the subtitle text and timecodes within the .ooona file structure.");
         }
 
         return subtitleArray.map((sub, index) => {
@@ -283,8 +317,7 @@
                 start: startRaw,
                 end: endRaw,
                 duration: duration,
-                text: cleanText,
-                rawText: rawText
+                text: cleanText
             };
         });
     }
@@ -329,6 +362,7 @@
     function renderValidation(subtitles) {
         const tbody = document.getElementById('resultBody');
         tbody.innerHTML = ''; 
+        let errorCount = 0;
 
         subtitles.forEach(sub => {
             let errors = [];
@@ -362,6 +396,8 @@
             
             if (errors.length === 0) {
                 tr.className = 'compliant-row';
+            } else {
+                errorCount++;
             }
 
             const errorHtml = errors.map(err => `<p class="error-text">❌ ${err}</p>`).join('');
@@ -377,7 +413,11 @@
             tbody.appendChild(tr);
         });
 
-        document.getElementById('resultTable').style.display = 'table';
+        if (errorCount > 0) {
+            document.getElementById('resultTable').style.display = 'table';
+        }
+
+        return errorCount;
     }
 </script>
 
