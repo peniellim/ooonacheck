@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOONA Subtitle Error Checker</title>
+    <!-- mammoth.js is used to extract raw text from .docx files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            font-size: 24px;
+            border-bottom: 2px solid #0056b3;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        .file-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #eef2f5;
+            border-radius: 5px;
+            border: 1px solid #d0d7de;
+        }
+        .file-section label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+        }
+        button {
+            background-color: #0056b3;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #004494;
+        }
+        .parsed-guidelines {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 5px;
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #f0f0f0;
+        }
+        .error-text {
+            color: #d9534f;
+            font-weight: bold;
+            margin: 2px 0;
+            font-size: 14px;
+        }
+        .compliant-row {
+            display: none; /* Do not show compliant cells */
+        }
+        .status-msg {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>OOONA Subtitle Error Checker</h1>
+
+    <div class="file-section">
+        <label for="guidelineFile">1. Upload Guidelines Document (.txt or .docx):</label>
+        <input type="file" id="guidelineFile" accept=".txt,.docx">
+        <p style="font-size: 12px; color: #666;">Ensure your document contains clear keywords like 'Max CPL: 42', 'Max CPS: 17', 'Max Lines: 2', 'Min Duration: 1', etc.</p>
+    </div>
+
+    <div class="file-section">
+        <label for="ooonaFile">2. Upload .ooona Subtitle File:</label>
+        <input type="file" id="ooonaFile" accept=".ooona,.json">
+    </div>
+
+    <button id="validateBtn">Check for Errors</button>
+    <div id="statusMsg" class="status-msg"></div>
+
+    <div id="parsedGuidelines" class="parsed-guidelines">
+        <strong>Extracted Guidelines Used for Validation:</strong>
+        <ul id="guidelineList"></ul>
+    </div>
+
+    <table id="resultTable" style="display: none;">
+        <thead>
+            <tr>
+                <th style="width: 5%;">Cell ID</th>
+                <th style="width: 15%;">Time In</th>
+                <th style="width: 15%;">Time Out</th>
+                <th style="width: 40%;">Subtitle Text</th>
+                <th style="width: 25%;">Errors / Warnings</th>
+            </tr>
+        </thead>
+        <tbody id="resultBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+    // Default guidelines in case parsing fails
+    let activeGuidelines = {
+        maxCPL: 42,
+        maxLines: 2,
+        maxCPS: 17.0,
+        minDuration: 1.0,
+        maxDuration: 7.0
+    };
+
+    document.getElementById('validateBtn').addEventListener('click', async () => {
+        const guidelineFile = document.getElementById('guidelineFile').files[0];
+        const ooonaFile = document.getElementById('ooonaFile').files[0];
+        const statusMsg = document.getElementById('statusMsg');
+
+        if (!ooonaFile) {
+            statusMsg.textContent = "Please upload an .ooona file.";
+            statusMsg.style.color = "#d9534f";
+            return;
+        }
+
+        statusMsg.textContent = "Processing files...";
+        statusMsg.style.color = "#0056b3";
+
+        try {
+            // 1. Process Guidelines
+            if (guidelineFile) {
+                const ext = guidelineFile.name.split('.').pop().toLowerCase();
+                let textContent = "";
+                
+                if (ext === "docx") {
+                    const arrayBuffer = await readFileAsArrayBuffer(guidelineFile);
+                    const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                    textContent = result.value;
+                } else {
+                    textContent = await readFileAsText(guidelineFile);
+                }
+                parseGuidelineText(textContent);
+            }
+            displayParsedGuidelines();
+
+            // 2. Process .ooona file
+            const ooonaContent = await readFileAsText(ooonaFile);
+            const subtitles = parseOoonaContent(ooonaContent);
+
+            // 3. Validate and Render
+            renderValidation(subtitles);
+            
+            statusMsg.textContent = "Validation complete. Showing only cells with errors.";
+            statusMsg.style.color = "#28a745";
+
+        } catch (error) {
+            console.error(error);
+            statusMsg.textContent = "Error during processing: " + error.message;
+            statusMsg.style.color = "#d9534f";
+        }
+    });
+
+    // --- File Reading Helpers ---
+    function readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = e => reject(e);
+            reader.readAsText(file);
+        });
+    }
+
+    function readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = e => reject(e);
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // --- Guideline Parsing ---
+    function parseGuidelineText(text) {
+        // Find numerical values near keywords using regex
+        const matchCPL = text.match(/(?:CPL|characters per line|max chars)[\s:=]*(\d+)/i);
+        if (matchCPL) activeGuidelines.maxCPL = parseInt(matchCPL[1], 10);
+
+        const matchLines = text.match(/(?:max lines|lines per subtitle|lines)[\s:=]*(\d+)/i);
+        if (matchLines) activeGuidelines.maxLines = parseInt(matchLines[1], 10);
+
+        const matchCPS = text.match(/(?:CPS|characters per second|reading speed)[\s:=]*(\d+(?:\.\d+)?)/i);
+        if (matchCPS) activeGuidelines.maxCPS = parseFloat(matchCPS[1]);
+
+        const matchMinDur = text.match(/(?:min duration|minimum duration)[\s:=]*(\d+(?:\.\d+)?)/i);
+        if (matchMinDur) activeGuidelines.minDuration = parseFloat(matchMinDur[1]);
+
+        const matchMaxDur = text.match(/(?:max duration|maximum duration)[\s:=]*(\d+(?:\.\d+)?)/i);
+        if (matchMaxDur) activeGuidelines.maxDuration = parseFloat(matchMaxDur[1]);
+    }
+
+    function displayParsedGuidelines() {
+        const glDiv = document.getElementById('parsedGuidelines');
+        const glList = document.getElementById('guidelineList');
+        glList.innerHTML = `
+            <li>Max Characters Per Line (CPL): ${activeGuidelines.maxCPL}</li>
+            <li>Max Lines: ${activeGuidelines.maxLines}</li>
+            <li>Max Characters Per Second (CPS): ${activeGuidelines.maxCPS}</li>
+            <li>Min Duration (seconds): ${activeGuidelines.minDuration}</li>
+            <li>Max Duration (seconds): ${activeGuidelines.maxDuration}</li>
+        `;
+        glDiv.style.display = 'block';
+    }
+
+    // --- Speculative .ooona Parsing Logic ---
+    function parseOoonaContent(jsonString) {
+        let data;
+        try {
+            data = JSON.parse(jsonString);
+        } catch (e) {
+            throw new Error("The .ooona file does not appear to be valid JSON. There is insufficient evidence to parse this proprietary format as plain text.");
+        }
+
+        // Recursively find an array that looks like subtitle data
+        let subtitleArray = findSubtitleArray(data);
+        if (!subtitleArray || subtitleArray.length === 0) {
+            throw new Error("Could not locate subtitle objects within the .ooona structure.");
+        }
+
+        return subtitleArray.map((sub, index) => {
+            // Speculative content: Guessing standard keys for subtitle text and timecodes
+            let rawText = sub.text || sub.Text || sub.dialogue || sub.subtitle || sub.html || "";
+            // Strip HTML tags for character counting
+            let cleanText = rawText.replace(/<[^>]*>?/gm, '').trim();
+            
+            let startRaw = sub.start || sub.in || sub.begin || sub.Start || 0;
+            let endRaw = sub.end || sub.out || sub.End || sub.Out || 0;
+            
+            let startSec = parseTimecodeToSeconds(startRaw);
+            let endSec = parseTimecodeToSeconds(endRaw);
+            let duration = Math.max(0, endSec - startSec);
+
+            return {
+                id: sub.id || sub.number || (index + 1),
+                start: startRaw,
+                end: endRaw,
+                duration: duration,
+                text: cleanText,
+                rawText: rawText
+            };
+        });
+    }
+
+    function findSubtitleArray(obj) {
+        if (Array.isArray(obj)) {
+            if (obj.length > 0 && (obj[0].text !== undefined || obj[0].start !== undefined || obj[0].in !== undefined)) {
+                return obj;
+            }
+        } else if (typeof obj === 'object' && obj !== null) {
+            for (let key in obj) {
+                let result = findSubtitleArray(obj[key]);
+                if (result) return result;
+            }
+        }
+        return null;
+    }
+
+    function parseTimecodeToSeconds(tc) {
+        if (typeof tc === 'number') return tc;
+        if (!tc) return 0;
+        let str = tc.toString().trim();
+        let parts = str.split(/[:\.]/);
+        if (parts.length >= 3) {
+            let h = parseInt(parts[0], 10) || 0;
+            let m = parseInt(parts[1], 10) || 0;
+            let s = parseInt(parts[2], 10) || 0;
+            let fraction = 0;
+            if (parts.length === 4) {
+                // Determine if frames or milliseconds
+                if (parts[3].length === 3) {
+                    fraction = parseInt(parts[3], 10) / 1000;
+                } else {
+                    fraction = parseInt(parts[3], 10) / 25; // default speculative fallback to 25fps
+                }
+            }
+            return (h * 3600) + (m * 60) + s + fraction;
+        }
+        return parseFloat(str) || 0;
+    }
+
+    // --- Validation and Rendering ---
+    function renderValidation(subtitles) {
+        const tbody = document.getElementById('resultBody');
+        tbody.innerHTML = ''; // Clear previous results
+
+        subtitles.forEach(sub => {
+            let errors = [];
+
+            // 1. Line Count Check
+            const lines = sub.text.split('\n');
+            if (lines.length > activeGuidelines.maxLines) {
+                errors.push(`Too many lines: ${lines.length} (Max is ${activeGuidelines.maxLines})`);
+            }
+
+            // 2. CPL Check
+            lines.forEach((line, i) => {
+                const len = line.trim().length;
+                if (len > activeGuidelines.maxCPL) {
+                    errors.push(`Line ${i + 1} exceeds max CPL: ${len} chars (Max is ${activeGuidelines.maxCPL})`);
+                }
+            });
+
+            // 3. CPS Check
+            const textLength = sub.text.replace(/\s+/g, ' ').length; // standard CPS usually counts spaces
+            const cps = sub.duration > 0 ? (textLength / sub.duration) : 0;
+            if (cps > activeGuidelines.maxCPS) {
+                errors.push(`CPS too high: ${cps.toFixed(2)} (Max is ${activeGuidelines.maxCPS})`);
+            }
+
+            // 4. Duration Check
+            if (sub.duration < activeGuidelines.minDuration && sub.duration > 0) {
+                errors.push(`Duration too short: ${sub.duration.toFixed(2)}s (Min is ${activeGuidelines.minDuration}s)`);
+            }
+            if (sub.duration > activeGuidelines.maxDuration) {
+                errors.push(`Duration too long: ${sub.duration.toFixed(2)}s (Max is ${activeGuidelines.maxDuration}s)`);
+            }
+
+            // Render Row
+            const tr = document.createElement('tr');
+            
+            if (errors.length === 0) {
+                // If there are no errors, assign the compliant class to hide it entirely
+                tr.className = 'compliant-row';
+            }
+
+            const errorHtml = errors.map(err => `<p class="error-text">❌ ${err}</p>`).join('');
+            
+            tr.innerHTML = `
+                <td>${sub.id}</td>
+                <td>${sub.start}</td>
+                <td>${sub.end}</td>
+                <td>${sub.text.replace(/\n/g, '<br>')}</td>
+                <td>${errorHtml}</td>
+            `;
+            
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('resultTable').style.display = 'table';
+    }
+</script>
+
+</body>
+</html>
