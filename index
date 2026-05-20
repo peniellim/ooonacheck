@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OOONA Subtitle Error Checker</title>
-    <!-- mammoth.js is used to extract raw text from .docx files -->
+    <!-- mammoth.js for .docx extraction -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <!-- PDF.js for .pdf extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -81,7 +83,7 @@
             font-size: 14px;
         }
         .compliant-row {
-            display: none; /* Do not show compliant cells */
+            display: none; 
         }
         .status-msg {
             margin-top: 10px;
@@ -95,8 +97,8 @@
     <h1>OOONA Subtitle Error Checker</h1>
 
     <div class="file-section">
-        <label for="guidelineFile">1. Upload Guidelines Document (.txt or .docx):</label>
-        <input type="file" id="guidelineFile" accept=".txt,.docx">
+        <label for="guidelineFile">1. Upload Guidelines Document (.txt, .docx, or .pdf):</label>
+        <input type="file" id="guidelineFile" accept=".txt,.docx,.pdf">
         <p style="font-size: 12px; color: #666;">Ensure your document contains clear keywords like 'Max CPL: 42', 'Max CPS: 17', 'Max Lines: 2', 'Min Duration: 1', etc.</p>
     </div>
 
@@ -129,7 +131,9 @@
 </div>
 
 <script>
-    // Default guidelines in case parsing fails
+    // Configure PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
     let activeGuidelines = {
         maxCPL: 42,
         maxLines: 2,
@@ -153,7 +157,6 @@
         statusMsg.style.color = "#0056b3";
 
         try {
-            // 1. Process Guidelines
             if (guidelineFile) {
                 const ext = guidelineFile.name.split('.').pop().toLowerCase();
                 let textContent = "";
@@ -162,6 +165,9 @@
                     const arrayBuffer = await readFileAsArrayBuffer(guidelineFile);
                     const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
                     textContent = result.value;
+                } else if (ext === "pdf") {
+                    const arrayBuffer = await readFileAsArrayBuffer(guidelineFile);
+                    textContent = await extractTextFromPDF(arrayBuffer);
                 } else {
                     textContent = await readFileAsText(guidelineFile);
                 }
@@ -169,11 +175,9 @@
             }
             displayParsedGuidelines();
 
-            // 2. Process .ooona file
             const ooonaContent = await readFileAsText(ooonaFile);
             const subtitles = parseOoonaContent(ooonaContent);
 
-            // 3. Validate and Render
             renderValidation(subtitles);
             
             statusMsg.textContent = "Validation complete. Showing only cells with errors.";
@@ -205,9 +209,21 @@
         });
     }
 
+    // --- PDF Parsing Logic ---
+    async function extractTextFromPDF(arrayBuffer) {
+        const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+        let text = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const pageText = content.items.map(item => item.str).join(' ');
+            text += pageText + " ";
+        }
+        return text;
+    }
+
     // --- Guideline Parsing ---
     function parseGuidelineText(text) {
-        // Find numerical values near keywords using regex
         const matchCPL = text.match(/(?:CPL|characters per line|max chars)[\s:=]*(\d+)/i);
         if (matchCPL) activeGuidelines.maxCPL = parseInt(matchCPL[1], 10);
 
@@ -243,19 +259,16 @@
         try {
             data = JSON.parse(jsonString);
         } catch (e) {
-            throw new Error("The .ooona file does not appear to be valid JSON. There is insufficient evidence to parse this proprietary format as plain text.");
+            throw new Error("The .ooona file does not appear to be valid JSON. There is insufficient evidence to parse this format.");
         }
 
-        // Recursively find an array that looks like subtitle data
         let subtitleArray = findSubtitleArray(data);
         if (!subtitleArray || subtitleArray.length === 0) {
             throw new Error("Could not locate subtitle objects within the .ooona structure.");
         }
 
         return subtitleArray.map((sub, index) => {
-            // Speculative content: Guessing standard keys for subtitle text and timecodes
             let rawText = sub.text || sub.Text || sub.dialogue || sub.subtitle || sub.html || "";
-            // Strip HTML tags for character counting
             let cleanText = rawText.replace(/<[^>]*>?/gm, '').trim();
             
             let startRaw = sub.start || sub.in || sub.begin || sub.Start || 0;
@@ -301,11 +314,10 @@
             let s = parseInt(parts[2], 10) || 0;
             let fraction = 0;
             if (parts.length === 4) {
-                // Determine if frames or milliseconds
                 if (parts[3].length === 3) {
                     fraction = parseInt(parts[3], 10) / 1000;
                 } else {
-                    fraction = parseInt(parts[3], 10) / 25; // default speculative fallback to 25fps
+                    fraction = parseInt(parts[3], 10) / 25; 
                 }
             }
             return (h * 3600) + (m * 60) + s + fraction;
@@ -316,18 +328,16 @@
     // --- Validation and Rendering ---
     function renderValidation(subtitles) {
         const tbody = document.getElementById('resultBody');
-        tbody.innerHTML = ''; // Clear previous results
+        tbody.innerHTML = ''; 
 
         subtitles.forEach(sub => {
             let errors = [];
 
-            // 1. Line Count Check
             const lines = sub.text.split('\n');
             if (lines.length > activeGuidelines.maxLines) {
                 errors.push(`Too many lines: ${lines.length} (Max is ${activeGuidelines.maxLines})`);
             }
 
-            // 2. CPL Check
             lines.forEach((line, i) => {
                 const len = line.trim().length;
                 if (len > activeGuidelines.maxCPL) {
@@ -335,14 +345,12 @@
                 }
             });
 
-            // 3. CPS Check
-            const textLength = sub.text.replace(/\s+/g, ' ').length; // standard CPS usually counts spaces
+            const textLength = sub.text.replace(/\s+/g, ' ').length; 
             const cps = sub.duration > 0 ? (textLength / sub.duration) : 0;
             if (cps > activeGuidelines.maxCPS) {
                 errors.push(`CPS too high: ${cps.toFixed(2)} (Max is ${activeGuidelines.maxCPS})`);
             }
 
-            // 4. Duration Check
             if (sub.duration < activeGuidelines.minDuration && sub.duration > 0) {
                 errors.push(`Duration too short: ${sub.duration.toFixed(2)}s (Min is ${activeGuidelines.minDuration}s)`);
             }
@@ -350,11 +358,9 @@
                 errors.push(`Duration too long: ${sub.duration.toFixed(2)}s (Max is ${activeGuidelines.maxDuration}s)`);
             }
 
-            // Render Row
             const tr = document.createElement('tr');
             
             if (errors.length === 0) {
-                // If there are no errors, assign the compliant class to hide it entirely
                 tr.className = 'compliant-row';
             }
 
