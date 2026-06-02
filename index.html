@@ -2,38 +2,36 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Professional Subtitle Validator</title>
+    <title>Ooona Subtitle Checker</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
     <style>
-        :root { --primary: #000; --bg: #fff; --border: #eee; --error-bg: #fff0f0; }
-        body { font-family: 'Courier New', monospace; padding: 20px; background: var(--bg); }
-        .wrap { max-width: 900px; margin: auto; }
-        .drop-zone { border: 2px dashed #ccc; padding: 30px; text-align: center; margin-bottom: 20px; cursor: pointer; }
-        .run-btn { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .wrap { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
+        .top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 20px; }
+        .drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; cursor: pointer; }
+        .run-btn { width: 100%; padding: 15px; background: #000; color: white; border: none; cursor: pointer; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
-        .has-error { background: var(--error-bg); }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .has-error { background: #fff0f0; color: #d00; }
     </style>
 </head>
 <body>
 
 <div class="wrap">
     <h2>Subtitle QC Tool</h2>
-    <div style="display: flex; gap: 20px;">
+    <div class="top-row">
         <div class="drop-zone" onclick="document.getElementById('fileSub').click()">
             <input type="file" id="fileSub" hidden accept=".ooona,.json,.xml">
-            <p>Upload Subtitle (.ooona)</p>
+            <p>Upload .ooona File</p>
         </div>
         <div class="drop-zone" onclick="document.getElementById('fileGuide').click()">
-            <input type="file" id="fileGuide" hidden accept=".docx,.txt,.pptx,.hwpx">
-            <p>Upload Guidelines (.docx, .txt, etc)</p>
+            <input type="file" id="fileGuide" hidden accept=".docx,.txt">
+            <p>Upload Guidelines</p>
         </div>
     </div>
-    
     <button class="run-btn" id="runBtn">RUN QUALITY CHECK</button>
-
     <table id="resultsTable" style="display:none;">
-        <thead><tr><th>#</th><th>Subtitle Text</th><th>Issues</th></tr></thead>
+        <thead><tr><th>#</th><th>Subtitle Text</th><th>Status</th></tr></thead>
         <tbody id="tblBody"></tbody>
     </table>
 </div>
@@ -41,28 +39,30 @@
 <script>
     let subData = [], guideText = "";
 
-    // 1. Handle Subtitle Upload (JSON/XML)
+    // Recursive search to find the subtitle array inside complex JSON
+    function findSubtitles(obj) {
+        if (!obj || typeof obj !== 'object') return null;
+        if (Array.isArray(obj)) {
+            // Check if this array contains objects that look like subtitles
+            if (obj.length > 0 && (obj[0].text || obj[0].content || obj[0].value)) {
+                return obj;
+            }
+            return null;
+        }
+        for (let key in obj) {
+            const found = findSubtitles(obj[key]);
+            if (found) return found;
+        }
+        return null;
+    }
+
     document.getElementById('fileSub').onchange = async (e) => {
         const text = await e.target.files[0].text();
-        // Simple heuristic: if starts with <, treat as XML, else JSON
-        if (text.trim().startsWith('<')) {
-            const parser = new DOMParser();
-            const xml = parser.parseFromString(text, "text/xml");
-            // Extract text nodes (Update selector based on your XML structure)
-            subData = Array.from(xml.querySelectorAll('Subtitle')).map((n, i) => ({ id: i+1, text: n.textContent }));
-        } else {
-            const json = JSON.parse(text);
-            // Recursive helper to find subtitle arrays
-            const find = (o) => {
-                if (Array.isArray(o) && o[0]?.text) return o;
-                for (let k in o) if (typeof o[k] === 'object') return find(o[k]);
-            };
-            subData = find(json) || [];
-        }
+        const json = JSON.parse(text);
+        subData = findSubtitles(json) || [];
         alert("Subtitles loaded: " + subData.length);
     };
 
-    // 2. Handle Guideline Upload
     document.getElementById('fileGuide').onchange = async (e) => {
         const file = e.target.files[0];
         if (file.name.endsWith('.docx')) {
@@ -74,19 +74,21 @@
         alert("Guidelines loaded.");
     };
 
-    // 3. Run Logic
     document.getElementById('runBtn').onclick = () => {
         const tbody = document.getElementById('tblBody');
         tbody.innerHTML = "";
         document.getElementById('resultsTable').style.display = "table";
 
         subData.forEach((sub, i) => {
-            const isError = !guideText.includes(sub.text.toLowerCase().substring(0, 10));
+            const text = sub.text || sub.content || sub.value || "";
+            // Error logic: check if subtitle text exists in guidelines
+            const isError = !guideText.includes(text.toLowerCase().substring(0, 10));
+            
             const row = tbody.insertRow();
             if (isError) row.className = "has-error";
             row.insertCell(0).innerText = i + 1;
-            row.insertCell(1).innerText = sub.text;
-            row.insertCell(2).innerText = isError ? "⚠ Term mismatch" : "OK";
+            row.insertCell(1).innerText = text;
+            row.insertCell(2).innerText = isError ? "⚠ Mismatch" : "OK";
         });
     };
 </script>
