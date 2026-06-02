@@ -2,41 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Professional Ooona Validator</title>
+    <title>Professional Ooona Subtitle Validator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; background: #f9f9f9; }
-        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .controls { display: flex; gap: 20px; align-items: center; }
-        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
-        button:hover { background: #0056b3; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        .error-row { background-color: #fff0f0; }
-        .error-text { color: #d9534f; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .controls { display: flex; gap: 20px; align-items: flex-end; }
+        button { padding: 10px 20px; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .error-row { background-color: #ffe6e6; }
+        .error-badge { color: red; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<h2>Subtitle Validation Suite</h2>
+<h2>Subtitle & Guideline Validator</h2>
 
 <div class="panel">
     <div class="controls">
         <div>
-            <label><strong>1. Subtitle File (.ooona):</strong></label><br>
+            <label><strong>1. .ooona File:</strong></label><br>
             <input type="file" id="ooonaFile" accept=".ooona">
         </div>
         <div>
-            <label><strong>2. Guidelines Document:</strong></label><br>
+            <label><strong>2. Guidelines File:</strong></label><br>
             <input type="file" id="docFile" accept=".docx,.pdf,.txt">
         </div>
-        <button id="runBtn">Run Quality Checks</button>
+        <button id="runBtn">Run Checks</button>
     </div>
 </div>
 
 <table id="resultTable" style="display:none;">
-    <thead><tr><th>ID</th><th>Content</th><th>Status</th></tr></thead>
+    <thead><tr><th>ID</th><th>Subtitle Text</th><th>Status</th></tr></thead>
     <tbody id="subBody"></tbody>
 </table>
 
@@ -44,21 +43,30 @@
     import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
 
-    let rawOoonaData = "";
+    let loadedSubtitles = [];
     let guidelineText = "";
 
-    // Load Files into Memory
+    // Load .ooona (Assuming JSON format based on typical Ooona exports)
     document.getElementById('ooonaFile').onchange = (e) => {
+        const file = e.target.files[0];
         const reader = new FileReader();
-        reader.onload = (e) => rawOoonaData = e.target.result;
-        reader.readAsText(e.target.files[0]);
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                // Adjust 'Subtitles' to match the key in your specific .ooona file
+                loadedSubtitles = data.Subtitles || []; 
+                alert("Subtitle file loaded. Found " + loadedSubtitles.length + " entries.");
+            } catch (err) { alert("Invalid .ooona file format."); }
+        };
+        reader.readAsText(file);
     };
 
+    // Load Guidelines
     document.getElementById('docFile').onchange = async (e) => {
         const file = e.target.files[0];
         if (file.name.endsWith('.docx')) {
-            const result = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
-            guidelineText = result.value.toLowerCase();
+            const res = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
+            guidelineText = res.value.toLowerCase();
         } else if (file.name.endsWith('.pdf')) {
             const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
             let text = "";
@@ -71,30 +79,28 @@
         } else {
             guidelineText = (await file.text()).toLowerCase();
         }
-        console.log("Guidelines Loaded.");
+        alert("Guidelines loaded.");
     };
 
-    // Run Checks
+    // Run Logic
     document.getElementById('runBtn').onclick = () => {
-        if (!rawOoonaData || !guidelineText) return alert("Please upload both files.");
+        if (!loadedSubtitles.length || !guidelineText) return alert("Upload both files first.");
         
-        const lines = rawOoonaData.split(/\r?\n/);
         const tbody = document.getElementById('subBody');
         tbody.innerHTML = "";
         document.getElementById('resultTable').style.display = "table";
 
-        lines.forEach((line, index) => {
-            if (line.trim().length < 3) return;
-            
-            const isError = !guidelineText.includes(line.toLowerCase().substring(0, 10));
+        loadedSubtitles.forEach((sub, index) => {
+            // Adjust 'Text' key if your Ooona file uses a different field name
+            const text = sub.Text || ""; 
+            const isError = !guidelineText.includes(text.toLowerCase().substring(0, 5));
+
             const row = tbody.insertRow();
             if (isError) row.className = "error-row";
             
             row.insertCell(0).innerText = index + 1;
-            row.insertCell(1).innerText = line;
-            row.insertCell(2).innerHTML = isError 
-                ? '<span class="error-text">⚠ Check Guidelines</span>' 
-                : 'Pass';
+            row.insertCell(1).innerText = text;
+            row.insertCell(2).innerHTML = isError ? '<span class="error-badge">⚠ Mismatch</span>' : 'Pass';
         });
     };
 </script>
