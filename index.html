@@ -2,86 +2,94 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Ooona Error Checker</title>
+    <title>Ooona Subtitle Checker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
-        .container { display: flex; gap: 20px; }
-        .upload-section { background: white; padding: 20px; border-radius: 8px; flex: 1; }
-        #results { margin-top: 20px; background: white; padding: 20px; }
-        .error { background-color: #ffcccc; color: #cc0000; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .upload-area { display: flex; gap: 20px; margin-bottom: 20px; }
+        .error-cell { background-color: #ffcccc; color: #cc0000; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+        .error-msg { font-size: 0.8em; display: block; color: #880000; }
     </style>
 </head>
 <body>
 
-<h2>Ooona Subtitle & Document Error Checker</h2>
-
-<div class="container">
-    <div class="upload-section">
-        <h3>1. Upload .ooona File</h3>
+<h2>Subtitle & Guideline Checker</h2>
+<div class="upload-area">
+    <div>
+        <label>1. Upload .ooona File:</label><br>
         <input type="file" id="ooonaFile" accept=".ooona">
     </div>
-    <div class="upload-section">
-        <h3>2. Upload Source File</h3>
-        <input type="file" id="sourceFile" accept=".txt,.docx,.pdf,.pptx,.hwp">
+    <div>
+        <label>2. Upload Guidelines/Script:</label><br>
+        <input type="file" id="docFile" accept=".docx,.pdf,.txt">
     </div>
 </div>
 
-<div id="results">
-    <h3>Comparison Results</h3>
-    <table id="subTable">
-        <thead><tr><th>ID</th><th>Subtitle Text</th><th>Status</th></tr></thead>
-        <tbody id="subBody"></tbody>
-    </table>
-</div>
+<table id="subTable">
+    <thead><tr><th>Line</th><th>Subtitle Text</th><th>Analysis</th></tr></thead>
+    <tbody id="subBody"></tbody>
+</table>
 
-<script>
-    const ooonaInput = document.getElementById('ooonaFile');
-    const sourceInput = document.getElementById('sourceFile');
-    let sourceContent = "";
+<script type="module">
+    import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
 
-    // Handle Source File (Simplified text extraction)
-    sourceInput.addEventListener('change', async (e) => {
+    let guidelineText = "";
+
+    // Handle Document Upload
+    document.getElementById('docFile').addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = (e) => { sourceContent = e.target.result; };
-        reader.readAsText(file); // Note: For PDF/DOCX, a library like mammoth.js is needed
+        if (file.name.endsWith('.docx')) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({arrayBuffer});
+            guidelineText = result.value.toLowerCase();
+        } else if (file.name.endsWith('.pdf')) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+            let text = "";
+            for(let i=1; i<=pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(" ");
+            }
+            guidelineText = text.toLowerCase();
+        } else {
+            guidelineText = (await file.text()).toLowerCase();
+        }
+        alert("Guidelines loaded successfully.");
     });
 
-    // Handle Ooona File
-    ooonaInput.addEventListener('change', (e) => {
+    // Process Ooona File
+    document.getElementById('ooonaFile').addEventListener('change', (e) => {
         const file = e.target.files[0];
         const reader = new FileReader();
         reader.onload = (e) => {
-            parseOoona(e.target.result);
+            const lines = e.target.result.split('\n');
+            const tbody = document.getElementById('subBody');
+            tbody.innerHTML = "";
+
+            lines.forEach((line, index) => {
+                if(line.trim() === "") return;
+                const row = tbody.insertRow();
+                row.insertCell(0).innerText = index + 1;
+                const textCell = row.insertCell(1);
+                textCell.innerText = line;
+                
+                // Error Checking Logic: Check if substring exists in guidelines
+                // This is a basic "Term Validation" check
+                if (guidelineText && !guidelineText.includes(line.toLowerCase().substring(0, 10))) {
+                    textCell.classList.add('error-cell');
+                    row.insertCell(2).innerHTML = '<span class="error-msg">Mismatch: Term not found in guidelines.</span>';
+                } else {
+                    row.insertCell(2).innerText = "OK";
+                }
+            });
         };
         reader.readAsText(file);
     });
-
-    function parseOoona(data) {
-        const lines = data.split('\n');
-        const tbody = document.getElementById('subBody');
-        tbody.innerHTML = '';
-
-        lines.forEach((line, index) => {
-            if (line.trim() === "") return;
-            
-            const row = tbody.insertRow();
-            row.insertCell(0).innerText = index + 1;
-            const cellText = row.insertCell(1);
-            cellText.innerText = line;
-            const statusCell = row.insertCell(2);
-
-            // Simple Logic: Check if line contains words NOT in source document
-            if (sourceContent && !sourceContent.includes(line.substring(0, 5))) {
-                statusCell.innerHTML = '<span class="error">Context Mismatch</span>';
-                cellText.classList.add('error');
-            } else {
-                statusCell.innerText = 'Pass';
-            }
-        });
-    }
 </script>
 
 </body>
