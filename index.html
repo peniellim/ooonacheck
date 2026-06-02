@@ -1,425 +1,912 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OOONA Subtitle Error Checker</title>
-    <!-- mammoth.js for .docx extraction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
-    <!-- PDF.js for .pdf extraction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1000px;
-            margin: auto;
-            background: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-        h1 {
-            font-size: 24px;
-            border-bottom: 2px solid #0056b3;
-            padding-bottom: 10px;
-            margin-top: 0;
-        }
-        .file-section {
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #eef2f5;
-            border-radius: 5px;
-            border: 1px solid #d0d7de;
-        }
-        .file-section label {
-            font-weight: bold;
-            display: block;
-            margin-bottom: 8px;
-        }
-        button {
-            background-color: #0056b3;
-            color: #fff;
-            border: none;
-            padding: 10px 20px;
-            font-size: 16px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #004494;
-        }
-        .parsed-guidelines {
-            margin-top: 20px;
-            padding: 15px;
-            background: #e8f5e9;
-            border: 1px solid #c8e6c9;
-            border-radius: 5px;
-            display: none;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #ccc;
-            padding: 10px;
-            text-align: left;
-            vertical-align: top;
-        }
-        th {
-            background-color: #f0f0f0;
-        }
-        .error-text {
-            color: #d9534f;
-            font-weight: bold;
-            margin: 2px 0;
-            font-size: 14px;
-        }
-        .compliant-row {
-            display: none; /* Compliant cells remain hidden */
-        }
-        .status-msg {
-            margin-top: 15px;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 4px;
-            display: none;
-        }
-        .success-banner {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .error-banner {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .info-banner {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOONA Subtitle QC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8e6e1;
+    --muted: #7a7880;
+    --accent: #c8f04a;
+    --accent-dim: rgba(200,240,74,0.12);
+    --accent-dim2: rgba(200,240,74,0.06);
+    --error: #ff5f5f;
+    --error-dim: rgba(255,95,95,0.12);
+    --warn: #ffb545;
+    --warn-dim: rgba(255,181,69,0.1);
+    --ok: #4af0a0;
+    --ok-dim: rgba(74,240,160,0.08);
+    --radius: 10px;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Sora', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .logo-mark svg { width: 18px; height: 18px; }
+
+  header h1 {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  header span {
+    font-size: 13px;
+    color: var(--muted);
+    margin-left: 4px;
+  }
+
+  .badge {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(200,240,74,0.25);
+    letter-spacing: 0.05em;
+  }
+
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    height: calc(100vh - 61px);
+  }
+
+  .sidebar {
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 20px 20px 10px;
+  }
+
+  .upload-zone {
+    margin: 0 16px 12px;
+    border: 1px dashed var(--border2);
+    border-radius: var(--radius);
+    padding: 20px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    background: var(--accent-dim2);
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .upload-zone input {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%;
+  }
+  .upload-zone .uz-icon {
+    font-size: 22px;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .upload-zone .uz-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    display: block;
+    margin-bottom: 3px;
+  }
+  .upload-zone .uz-sub {
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+  }
+  .upload-zone.has-file {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .upload-zone.has-file .uz-title { color: var(--accent); }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 0;
+  }
+
+  .run-btn {
+    margin: 16px;
+    padding: 12px;
+    background: var(--accent);
+    color: #0e0e10;
+    border: none;
+    border-radius: var(--radius);
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: -0.01em;
+  }
+  .run-btn:hover:not(:disabled) {
+    background: #d9ff5a;
+    transform: translateY(-1px);
+  }
+  .run-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin: 0 16px 16px;
+  }
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .stat-card .sv { font-size: 22px; font-weight: 600; line-height: 1; font-family: var(--mono); }
+  .stat-card .sl { font-size: 10px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat-card.err .sv { color: var(--error); }
+  .stat-card.ok .sv { color: var(--ok); }
+  .stat-card.total .sv { color: var(--text); }
+
+  .filter-row {
+    display: flex;
+    gap: 6px;
+    padding: 0 16px 12px;
+    flex-wrap: wrap;
+  }
+  .filter-chip {
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--sans);
+  }
+  .filter-chip.active {
+    background: var(--surface2);
+    color: var(--text);
+    border-color: var(--border2);
+  }
+  .filter-chip.errors-only.active {
+    background: var(--error-dim);
+    color: var(--error);
+    border-color: rgba(255,95,95,0.3);
+  }
+
+  .rules-list {
+    padding: 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .rule-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    line-height: 1.4;
+  }
+  .rule-item strong {
+    display: block;
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .progress-bar {
+    margin: 0 16px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    height: 4px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 100px;
+    width: 0%;
+    transition: width 0.3s;
+  }
+  .progress-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin: -8px 16px 12px;
+    text-align: center;
+  }
+
+  .content-area {
+    overflow-y: auto;
+    padding: 0;
+    background: var(--bg);
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--muted);
+    text-align: center;
+    padding: 40px;
+  }
+  .empty-state .es-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .empty-state h2 { font-size: 18px; font-weight: 500; color: var(--text); margin-bottom: 8px; opacity: 0.6; }
+  .empty-state p { font-size: 13px; max-width: 300px; line-height: 1.7; }
+
+  .subtitle-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .subtitle-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border2);
+  }
+  .subtitle-table th {
+    padding: 12px 16px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .subtitle-table th:first-child { width: 60px; }
+  .subtitle-table th:nth-child(2) { width: 110px; }
+  .subtitle-table th:nth-child(3) { width: 110px; }
+
+  .sub-row {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .sub-row:hover { background: rgba(255,255,255,0.02); }
+  .sub-row.has-error { background: var(--error-dim); }
+  .sub-row.has-error:hover { background: rgba(255,95,95,0.17); }
+  .sub-row.hidden { display: none; }
+
+  .sub-row td {
+    padding: 10px 16px;
+    vertical-align: top;
+    font-size: 13px;
+  }
+
+  .idx {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+
+  .tc {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+
+  .sub-text {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+  }
+
+  .errors-cell {
+    vertical-align: top;
+    padding-top: 10px;
+    min-width: 200px;
+  }
+
+  .error-tag {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 6px;
+    background: var(--error-dim);
+    border: 1px solid rgba(255,95,95,0.25);
+    color: var(--error);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    margin: 2px 2px 2px 0;
+    line-height: 1.4;
+    max-width: 300px;
+  }
+  .error-tag-code {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 10px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--error);
+    opacity: 0.8;
+  }
+
+  .ok-indicator {
+    color: var(--ok);
+    font-size: 12px;
+    font-family: var(--mono);
+    opacity: 0.5;
+  }
+
+  .scanning-row td {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+    background: var(--surface);
+    text-align: center;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+  .scanning-dot {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  .results-header {
+    padding: 16px 16px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .results-header h2 {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    padding-bottom: 16px;
+  }
+  .export-btn {
+    padding: 6px 14px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: all 0.15s;
+    margin-bottom: 16px;
+  }
+  .export-btn:hover { background: var(--surface2); }
+</style>
 </head>
 <body>
 
-<div class="container">
-    <h1>OOONA Subtitle Error Checker</h1>
+<header>
+  <div class="logo-mark">
+    <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="14" height="10" rx="2" fill="#0e0e10"/>
+      <rect x="2" y="14" width="5" height="2" rx="1" fill="#0e0e10"/>
+      <rect x="9" y="14" width="7" height="2" rx="1" fill="#0e0e10"/>
+    </svg>
+  </div>
+  <h1>OOONA Subtitle QC <span>/ Error Checker</span></h1>
+  <div class="badge" id="statusBadge">READY</div>
+</header>
 
-    <div class="file-section">
-        <label for="guidelineFile">1. Upload Guidelines Document (.txt, .docx, or .pdf):</label>
-        <input type="file" id="guidelineFile" accept=".txt,.docx,.pdf">
-        <p style="font-size: 12px; color: #666;">Keywords required: 'Max CPL:', 'Max CPS:', 'Max Lines:', 'Min Duration:', etc.</p>
+<main>
+  <aside class="sidebar">
+    <div class="section-label">1 — Subtitle File</div>
+    <div class="upload-zone" id="subZone">
+      <input type="file" id="subFile" accept=".xml,.ooo,.ttml,.srt,.vtt,.itt,.stl,.dfxp" onchange="handleSubFile(this)">
+      <span class="uz-icon">📄</span>
+      <span class="uz-title" id="subTitle">Upload subtitle file</span>
+      <span class="uz-sub">.ooo · .xml · .ttml · .srt · .vtt</span>
     </div>
 
-    <div class="file-section">
-        <label for="ooonaFile">2. Upload .ooona Subtitle File:</label>
-        <input type="file" id="ooonaFile" accept=".ooona,.json">
+    <div class="section-label">2 — Guidelines Document</div>
+    <div class="upload-zone" id="guideZone">
+      <input type="file" id="guideFile" accept=".txt,.docx,.pdf,.md" onchange="handleGuideFile(this)">
+      <span class="uz-icon">📋</span>
+      <span class="uz-title" id="guideTitle">Upload guidelines</span>
+      <span class="uz-sub">.docx · .txt · .md · .pdf</span>
     </div>
 
-    <button id="validateBtn">Check for Errors</button>
-    <div id="statusMsg" class="status-msg"></div>
+    <div class="divider"></div>
 
-    <div id="parsedGuidelines" class="parsed-guidelines">
-        <strong>Extracted Guidelines Used for Validation:</strong>
-        <ul id="guidelineList"></ul>
+    <button class="run-btn" id="runBtn" onclick="runChecks()" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
+      Run QC Checks
+    </button>
+
+    <div id="progressWrap" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">Analyzing…</div>
     </div>
 
-    <table id="resultTable" style="display: none;">
-        <thead>
-            <tr>
-                <th style="width: 5%;">Cell ID</th>
-                <th style="width: 15%;">Time In</th>
-                <th style="width: 15%;">Time Out</th>
-                <th style="width: 40%;">Subtitle Text</th>
-                <th style="width: 25%;">Errors / Warnings</th>
-            </tr>
-        </thead>
-        <tbody id="resultBody">
-        </tbody>
-    </table>
-</div>
+    <div id="statsWrap" style="display:none">
+      <div class="stats-row">
+        <div class="stat-card total"><div class="sv" id="statTotal">0</div><div class="sl">Total</div></div>
+        <div class="stat-card err"><div class="sv" id="statErrors">0</div><div class="sl">Errors</div></div>
+        <div class="stat-card ok"><div class="sv" id="statClean">0</div><div class="sl">Clean</div></div>
+      </div>
+      <div class="filter-row">
+        <button class="filter-chip active" id="filterAll" onclick="setFilter('all')">All rows</button>
+        <button class="filter-chip errors-only" id="filterErr" onclick="setFilter('errors')">Errors only</button>
+      </div>
+    </div>
+
+    <div id="rulesWrap" style="display:none">
+      <div class="section-label">Detected rules</div>
+      <div class="rules-list" id="rulesList"></div>
+    </div>
+  </aside>
+
+  <section class="content-area" id="contentArea">
+    <div class="empty-state" id="emptyState">
+      <div class="es-icon">🎬</div>
+      <h2>No file loaded</h2>
+      <p>Upload an OOONA subtitle file and a guidelines document, then click <strong>Run QC Checks</strong> to analyse all subtitle cells against your rules.</p>
+    </div>
+  </section>
+</main>
 
 <script>
-    // Initialize PDF.js properly to avoid local CORS issues
-    if (typeof pdfjsLib !== 'undefined') {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    } else {
-        showStatus("Warning: PDF parser failed to load. PDF guidelines may not work.", "error-banner");
+let subtitleData = [];
+let guidelinesText = '';
+let results = [];
+let currentFilter = 'all';
+let parsedRules = [];
+
+// ─── FILE HANDLERS ───────────────────────────────────────────────
+
+async function handleSubFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const zone = document.getElementById('subZone');
+  const title = document.getElementById('subTitle');
+  zone.classList.add('has-file');
+  title.textContent = file.name;
+  const text = await file.text();
+  subtitleData = parseSubtitleFile(text, file.name);
+  checkReady();
+}
+
+async function handleGuideFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const zone = document.getElementById('guideZone');
+  const title = document.getElementById('guideTitle');
+  zone.classList.add('has-file');
+  title.textContent = file.name;
+
+  if (file.name.endsWith('.docx')) {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    guidelinesText = result.value;
+  } else {
+    guidelinesText = await file.text();
+  }
+  checkReady();
+}
+
+function checkReady() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = !(subtitleData.length > 0 && guidelinesText.trim().length > 0);
+}
+
+// ─── SUBTITLE PARSERS ─────────────────────────────────────────────
+
+function parseSubtitleFile(text, filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (ext === 'srt') return parseSRT(text);
+  if (ext === 'vtt') return parseVTT(text);
+  return parseXMLBased(text); // .ooo, .xml, .ttml, .dfxp, .itt, .stl
+}
+
+function parseSRT(text) {
+  const blocks = text.trim().split(/\n\s*\n/);
+  return blocks.map(block => {
+    const lines = block.split('\n');
+    const idx = parseInt(lines[0]) || 0;
+    const tc = lines[1] || '';
+    const [tcIn, tcOut] = tc.split('-->').map(s => s.trim());
+    const content = lines.slice(2).join('\n').replace(/<[^>]+>/g, '').trim();
+    return { idx, tcIn: tcIn||'', tcOut: tcOut||'', content, raw: block };
+  }).filter(s => s.content);
+}
+
+function parseVTT(text) {
+  const blocks = text.replace(/^WEBVTT.*\n/, '').trim().split(/\n\s*\n/);
+  let idx = 1;
+  return blocks.map(block => {
+    const lines = block.split('\n').filter(Boolean);
+    let tcLine = lines.find(l => l.includes('-->'));
+    if (!tcLine) return null;
+    const [tcIn, tcOut] = tcLine.split('-->').map(s => s.trim().split(' ')[0]);
+    const textLines = lines.filter(l => !l.includes('-->') && !/^\d+$/.test(l.trim()) && !/^NOTE/.test(l));
+    const content = textLines.join('\n').replace(/<[^>]+>/g, '').trim();
+    return content ? { idx: idx++, tcIn, tcOut, content, raw: block } : null;
+  }).filter(Boolean);
+}
+
+function parseXMLBased(text) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+  const results = [];
+  let idx = 1;
+
+  // Try various TTML/OOONA structures
+  const selectors = ['p', 'subtitle', 'Subtitle', 'event'];
+  let nodes = [];
+  for (const sel of selectors) {
+    nodes = Array.from(doc.querySelectorAll(sel));
+    if (nodes.length) break;
+  }
+
+  // Fallback: parse manually for OOONA proprietary XML
+  if (!nodes.length) {
+    const rawText = text;
+    const subMatches = [...rawText.matchAll(/<(?:p|subtitle)[^>]*begin="([^"]*)"[^>]*end="([^"]*)"[^>]*>([\s\S]*?)<\/(?:p|subtitle)>/gi)];
+    return subMatches.map((m, i) => ({
+      idx: i+1,
+      tcIn: m[1],
+      tcOut: m[2],
+      content: m[3].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      raw: m[0]
+    })).filter(s => s.content);
+  }
+
+  nodes.forEach(node => {
+    const tcIn = node.getAttribute('begin') || node.getAttribute('in') || node.getAttribute('timein') || '';
+    const tcOut = node.getAttribute('end') || node.getAttribute('out') || node.getAttribute('timeout') || '';
+    const content = node.textContent.replace(/\s+/g, ' ').trim();
+    if (content) results.push({ idx: idx++, tcIn, tcOut, content, raw: node.outerHTML });
+  });
+  return results;
+}
+
+// ─── RULE EXTRACTION ────────────────────────────────────────────
+
+function extractRules(guidelinesText) {
+  const lines = guidelinesText.split('\n').map(l => l.trim()).filter(Boolean);
+  const rules = [];
+  const rulePatterns = [
+    /(\d+[\.\):]?\s*.{10,})/,
+    /^[-•*]\s*(.+)/,
+    /^[A-Z][^.]*\./,
+  ];
+
+  // Extract numbered/bulleted rules
+  lines.forEach(line => {
+    if (/^(\d+[\.\):]|[-•*►])\s+/.test(line) || /^[A-Z][^.]{10,}\./.test(line)) {
+      const clean = line.replace(/^[\d\.\)\:\-\•\*►\s]+/, '').trim();
+      if (clean.length > 15) rules.push(clean);
     }
+  });
 
-    let activeGuidelines = {
-        maxCPL: 42,
-        maxLines: 2,
-        maxCPS: 17.0,
-        minDuration: 1.0,
-        maxDuration: 7.0
-    };
+  // If nothing found, split by period sentences
+  if (!rules.length) {
+    const sentences = guidelinesText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 20);
+    rules.push(...sentences.slice(0, 20));
+  }
 
-    function showStatus(message, className) {
-        const statusMsg = document.getElementById('statusMsg');
-        statusMsg.textContent = message;
-        statusMsg.className = 'status-msg ' + className;
-        statusMsg.style.display = 'block';
-    }
+  return rules.slice(0, 30).map((r, i) => ({
+    id: `R${String(i+1).padStart(2,'0')}`,
+    text: r,
+    shortLabel: r.length > 55 ? r.slice(0,52)+'…' : r
+  }));
+}
 
-    document.getElementById('validateBtn').addEventListener('click', async () => {
-        const guidelineFile = document.getElementById('guidelineFile').files[0];
-        const ooonaFile = document.getElementById('ooonaFile').files[0];
-        
-        document.getElementById('resultTable').style.display = 'none';
+// ─── RULE DISPLAY ───────────────────────────────────────────────
 
-        if (!ooonaFile) {
-            showStatus("Please upload an .ooona subtitle file first.", "error-banner");
-            return;
-        }
+function showRules(rules) {
+  const wrap = document.getElementById('rulesWrap');
+  const list = document.getElementById('rulesList');
+  wrap.style.display = 'block';
+  list.innerHTML = rules.map(r => `
+    <div class="rule-item">
+      <strong>${r.id}</strong>
+      ${escHtml(r.shortLabel)}
+    </div>
+  `).join('');
+}
 
-        showStatus("Processing files...", "info-banner");
+// ─── MAIN CHECK RUNNER ──────────────────────────────────────────
 
-        try {
-            // Process Guidelines
-            if (guidelineFile) {
-                const ext = guidelineFile.name.split('.').pop().toLowerCase();
-                let textContent = "";
-                
-                if (ext === "docx") {
-                    const arrayBuffer = await readFileAsArrayBuffer(guidelineFile);
-                    const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-                    textContent = result.value;
-                } else if (ext === "pdf") {
-                    const arrayBuffer = await readFileAsArrayBuffer(guidelineFile);
-                    textContent = await extractTextFromPDF(arrayBuffer);
-                } else {
-                    textContent = await readFileAsText(guidelineFile);
-                }
-                parseGuidelineText(textContent);
-            }
-            displayParsedGuidelines();
+async function runChecks() {
+  if (!subtitleData.length || !guidelinesText.trim()) return;
 
-            // Process Subtitles
-            const ooonaContent = await readFileAsText(ooonaFile);
-            const subtitles = parseOoonaContent(ooonaContent);
-            
-            // Render Validation
-            const errorCount = renderValidation(subtitles);
-            
-            if (errorCount === 0) {
-                showStatus("✅ Validation complete! All subtitle cells are compliant. No errors found.", "success-banner");
-            } else {
-                showStatus(`⚠️ Validation complete. Found errors in ${errorCount} cells. Compliant cells are hidden.`, "error-banner");
-            }
+  parsedRules = extractRules(guidelinesText);
+  showRules(parsedRules);
 
-        } catch (error) {
-            console.error(error);
-            showStatus("Error: " + error.message, "error-banner");
-        }
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('statusBadge').textContent = 'RUNNING';
+  document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('statsWrap').style.display = 'none';
+  document.getElementById('rulesWrap').style.display = 'none';
+  showEmptyState(false);
+
+  results = Array(subtitleData.length).fill(null).map(() => ({ errors: [], scanning: true }));
+  renderTable();
+
+  const BATCH = 8;
+  let done = 0;
+
+  for (let i = 0; i < subtitleData.length; i += BATCH) {
+    const batch = subtitleData.slice(i, i + BATCH);
+    const batchResults = await checkBatch(batch, parsedRules, guidelinesText);
+
+    batchResults.forEach((r, j) => {
+      results[i + j] = r;
     });
 
-    // --- File Reading Helpers ---
-    function readFileAsText(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = e => resolve(e.target.result);
-            reader.onerror = e => reject(new Error("Failed to read the file as text."));
-            reader.readAsText(file);
-        });
+    done = Math.min(i + BATCH, subtitleData.length);
+    const pct = Math.round((done / subtitleData.length) * 100);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = `Checking ${done} / ${subtitleData.length} subtitles…`;
+    updateTableBatch(i, batchResults);
+  }
+
+  finalise();
+}
+
+async function checkBatch(batch, rules, guidelines) {
+  const rulesBlock = rules.map(r => `${r.id}: ${r.text}`).join('\n');
+  const subsBlock = batch.map((s, i) => `[${i}] TC: ${s.tcIn}–${s.tcOut} | TEXT: ${s.content}`).join('\n');
+
+  const prompt = `You are a subtitle quality control assistant.
+
+GUIDELINES:
+${rulesBlock}
+
+SUBTITLES TO CHECK (indexed 0 to ${batch.length - 1}):
+${subsBlock}
+
+For each subtitle, check it against ALL rules. Return ONLY a JSON array with ${batch.length} objects, one per subtitle in order:
+[
+  {
+    "index": 0,
+    "errors": [
+      { "ruleId": "R01", "message": "brief explanation of the error" }
+    ]
+  }
+]
+If a subtitle has no errors, return an empty errors array. Respond with only valid JSON, no other text.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await resp.json();
+    const raw = (data.content || []).map(c => c.text || '').join('');
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return batch.map(() => ({ errors: [], scanning: false }));
+    const parsed = JSON.parse(jsonMatch[0]);
+    return parsed.map(r => ({ errors: r.errors || [], scanning: false }));
+  } catch (e) {
+    return batch.map(() => ({ errors: [], scanning: false }));
+  }
+}
+
+// ─── RENDERING ──────────────────────────────────────────────────
+
+function showEmptyState(show) {
+  document.getElementById('emptyState').style.display = show ? 'flex' : 'none';
+}
+
+function renderTable() {
+  const area = document.getElementById('contentArea');
+  area.innerHTML = `
+    <div class="results-header">
+      <h2>Subtitle results</h2>
+      <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+    <table class="subtitle-table" id="subTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Time in</th>
+          <th>Time out</th>
+          <th>Text</th>
+          <th>Errors</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  `;
+  const tbody = document.getElementById('tableBody');
+  subtitleData.forEach((s, i) => {
+    tbody.appendChild(buildRow(s, i, results[i]));
+  });
+}
+
+function buildRow(sub, i, res) {
+  const tr = document.createElement('tr');
+  tr.className = 'sub-row' + (res && res.errors && res.errors.length ? ' has-error' : '');
+  tr.dataset.idx = i;
+  tr.dataset.hasError = (res && res.errors && res.errors.length) ? '1' : '0';
+
+  let errorsHtml = '';
+  if (!res || res.scanning) {
+    errorsHtml = `<span class="scanning-dot" style="font-size:11px;color:var(--muted);font-family:var(--mono)">scanning…</span>`;
+  } else if (res.errors && res.errors.length) {
+    errorsHtml = res.errors.map(e =>
+      `<div class="error-tag"><span class="error-tag-code">${escHtml(e.ruleId)}</span><span>${escHtml(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errorsHtml = `<span class="ok-indicator">✓ clean</span>`;
+  }
+
+  tr.innerHTML = `
+    <td class="idx">${sub.idx}</td>
+    <td class="tc">${escHtml(sub.tcIn)}</td>
+    <td class="tc">${escHtml(sub.tcOut)}</td>
+    <td><div class="sub-text">${escHtml(sub.content)}</div></td>
+    <td class="errors-cell">${errorsHtml}</td>
+  `;
+  return tr;
+}
+
+function updateTableBatch(startIdx, batchRes) {
+  batchRes.forEach((res, j) => {
+    const i = startIdx + j;
+    const tbody = document.getElementById('tableBody');
+    if (!tbody) return;
+    const oldRow = tbody.querySelector(`tr[data-idx="${i}"]`);
+    if (!oldRow) return;
+    const newRow = buildRow(subtitleData[i], i, res);
+    if (currentFilter === 'errors' && !res.errors.length) newRow.classList.add('hidden');
+    tbody.replaceChild(newRow, oldRow);
+  });
+}
+
+function finalise() {
+  document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('statsWrap').style.display = 'block';
+  document.getElementById('rulesWrap').style.display = 'block';
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('statusBadge').textContent = 'DONE';
+  showRules(parsedRules);
+
+  const errCount = results.filter(r => r && r.errors && r.errors.length).length;
+  document.getElementById('statTotal').textContent = subtitleData.length;
+  document.getElementById('statErrors').textContent = errCount;
+  document.getElementById('statClean').textContent = subtitleData.length - errCount;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.getElementById('filterAll').classList.toggle('active', f === 'all');
+  document.getElementById('filterErr').classList.toggle('active', f === 'errors');
+
+  const tbody = document.getElementById('tableBody');
+  if (!tbody) return;
+  tbody.querySelectorAll('tr.sub-row').forEach(tr => {
+    if (f === 'errors') {
+      tr.classList.toggle('hidden', tr.dataset.hasError !== '1');
+    } else {
+      tr.classList.remove('hidden');
     }
+  });
+}
 
-    function readFileAsArrayBuffer(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = e => resolve(e.target.result);
-            reader.onerror = e => reject(new Error("Failed to read the file data."));
-            reader.readAsArrayBuffer(file);
-        });
+// ─── EXPORT ─────────────────────────────────────────────────────
+
+function exportCSV() {
+  const rows = [['#','Time In','Time Out','Text','Error Rule','Error Message']];
+  subtitleData.forEach((s, i) => {
+    const res = results[i];
+    if (res && res.errors && res.errors.length) {
+      res.errors.forEach(e => {
+        rows.push([s.idx, s.tcIn, s.tcOut, `"${s.content.replace(/"/g,'""')}"`, e.ruleId, `"${e.message.replace(/"/g,'""')}"`]);
+      });
+    } else {
+      rows.push([s.idx, s.tcIn, s.tcOut, `"${s.content.replace(/"/g,'""')}"`, '', '']);
     }
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'qc_results.csv'; a.click();
+}
 
-    // --- PDF Parsing Logic ---
-    async function extractTextFromPDF(arrayBuffer) {
-        if (typeof pdfjsLib === 'undefined') throw new Error("PDF library is not loaded.");
-        const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-        let text = "";
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            const pageText = content.items.map(item => item.str).join(' ');
-            text += pageText + " ";
-        }
-        return text;
-    }
+// ─── UTILS ──────────────────────────────────────────────────────
 
-    // --- Guideline Parsing ---
-    function parseGuidelineText(text) {
-        const matchCPL = text.match(/(?:CPL|characters per line|max chars)[\s:=]*(\d+)/i);
-        if (matchCPL) activeGuidelines.maxCPL = parseInt(matchCPL[1], 10);
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-        const matchLines = text.match(/(?:max lines|lines per subtitle|lines)[\s:=]*(\d+)/i);
-        if (matchLines) activeGuidelines.maxLines = parseInt(matchLines[1], 10);
-
-        const matchCPS = text.match(/(?:CPS|characters per second|reading speed)[\s:=]*(\d+(?:\.\d+)?)/i);
-        if (matchCPS) activeGuidelines.maxCPS = parseFloat(matchCPS[1]);
-
-        const matchMinDur = text.match(/(?:min duration|minimum duration)[\s:=]*(\d+(?:\.\d+)?)/i);
-        if (matchMinDur) activeGuidelines.minDuration = parseFloat(matchMinDur[1]);
-
-        const matchMaxDur = text.match(/(?:max duration|maximum duration)[\s:=]*(\d+(?:\.\d+)?)/i);
-        if (matchMaxDur) activeGuidelines.maxDuration = parseFloat(matchMaxDur[1]);
-    }
-
-    function displayParsedGuidelines() {
-        const glDiv = document.getElementById('parsedGuidelines');
-        const glList = document.getElementById('guidelineList');
-        glList.innerHTML = `
-            <li>Max Characters Per Line (CPL): ${activeGuidelines.maxCPL}</li>
-            <li>Max Lines: ${activeGuidelines.maxLines}</li>
-            <li>Max Characters Per Second (CPS): ${activeGuidelines.maxCPS}</li>
-            <li>Min Duration (seconds): ${activeGuidelines.minDuration}</li>
-            <li>Max Duration (seconds): ${activeGuidelines.maxDuration}</li>
-        `;
-        glDiv.style.display = 'block';
-    }
-
-    // --- Speculative .ooona Parsing Logic ---
-    function parseOoonaContent(jsonString) {
-        let data;
-        try {
-            data = JSON.parse(jsonString);
-        } catch (e) {
-            throw new Error("The .ooona file does not appear to be standard JSON. The data structure might be corrupted or in an unexpected format.");
-        }
-
-        let subtitleArray = findSubtitleArray(data);
-        if (!subtitleArray || subtitleArray.length === 0) {
-            throw new Error("Could not locate the subtitle text and timecodes within the .ooona file structure.");
-        }
-
-        return subtitleArray.map((sub, index) => {
-            let rawText = sub.text || sub.Text || sub.dialogue || sub.subtitle || sub.html || "";
-            let cleanText = rawText.replace(/<[^>]*>?/gm, '').trim();
-            
-            let startRaw = sub.start || sub.in || sub.begin || sub.Start || 0;
-            let endRaw = sub.end || sub.out || sub.End || sub.Out || 0;
-            
-            let startSec = parseTimecodeToSeconds(startRaw);
-            let endSec = parseTimecodeToSeconds(endRaw);
-            let duration = Math.max(0, endSec - startSec);
-
-            return {
-                id: sub.id || sub.number || (index + 1),
-                start: startRaw,
-                end: endRaw,
-                duration: duration,
-                text: cleanText
-            };
-        });
-    }
-
-    function findSubtitleArray(obj) {
-        if (Array.isArray(obj)) {
-            if (obj.length > 0 && (obj[0].text !== undefined || obj[0].start !== undefined || obj[0].in !== undefined)) {
-                return obj;
-            }
-        } else if (typeof obj === 'object' && obj !== null) {
-            for (let key in obj) {
-                let result = findSubtitleArray(obj[key]);
-                if (result) return result;
-            }
-        }
-        return null;
-    }
-
-    function parseTimecodeToSeconds(tc) {
-        if (typeof tc === 'number') return tc;
-        if (!tc) return 0;
-        let str = tc.toString().trim();
-        let parts = str.split(/[:\.]/);
-        if (parts.length >= 3) {
-            let h = parseInt(parts[0], 10) || 0;
-            let m = parseInt(parts[1], 10) || 0;
-            let s = parseInt(parts[2], 10) || 0;
-            let fraction = 0;
-            if (parts.length === 4) {
-                if (parts[3].length === 3) {
-                    fraction = parseInt(parts[3], 10) / 1000;
-                } else {
-                    fraction = parseInt(parts[3], 10) / 25; 
-                }
-            }
-            return (h * 3600) + (m * 60) + s + fraction;
-        }
-        return parseFloat(str) || 0;
-    }
-
-    // --- Validation and Rendering ---
-    function renderValidation(subtitles) {
-        const tbody = document.getElementById('resultBody');
-        tbody.innerHTML = ''; 
-        let errorCount = 0;
-
-        subtitles.forEach(sub => {
-            let errors = [];
-
-            const lines = sub.text.split('\n');
-            if (lines.length > activeGuidelines.maxLines) {
-                errors.push(`Too many lines: ${lines.length} (Max is ${activeGuidelines.maxLines})`);
-            }
-
-            lines.forEach((line, i) => {
-                const len = line.trim().length;
-                if (len > activeGuidelines.maxCPL) {
-                    errors.push(`Line ${i + 1} exceeds max CPL: ${len} chars (Max is ${activeGuidelines.maxCPL})`);
-                }
-            });
-
-            const textLength = sub.text.replace(/\s+/g, ' ').length; 
-            const cps = sub.duration > 0 ? (textLength / sub.duration) : 0;
-            if (cps > activeGuidelines.maxCPS) {
-                errors.push(`CPS too high: ${cps.toFixed(2)} (Max is ${activeGuidelines.maxCPS})`);
-            }
-
-            if (sub.duration < activeGuidelines.minDuration && sub.duration > 0) {
-                errors.push(`Duration too short: ${sub.duration.toFixed(2)}s (Min is ${activeGuidelines.minDuration}s)`);
-            }
-            if (sub.duration > activeGuidelines.maxDuration) {
-                errors.push(`Duration too long: ${sub.duration.toFixed(2)}s (Max is ${activeGuidelines.maxDuration}s)`);
-            }
-
-            const tr = document.createElement('tr');
-            
-            if (errors.length === 0) {
-                tr.className = 'compliant-row';
-            } else {
-                errorCount++;
-            }
-
-            const errorHtml = errors.map(err => `<p class="error-text">❌ ${err}</p>`).join('');
-            
-            tr.innerHTML = `
-                <td>${sub.id}</td>
-                <td>${sub.start}</td>
-                <td>${sub.end}</td>
-                <td>${sub.text.replace(/\n/g, '<br>')}</td>
-                <td>${errorHtml}</td>
-            `;
-            
-            tbody.appendChild(tr);
-        });
-
-        if (errorCount > 0) {
-            document.getElementById('resultTable').style.display = 'table';
-        }
-
-        return errorCount;
-    }
+// Drag-and-drop
+['subZone','guideZone'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dragover'); });
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const input = el.querySelector('input');
+    const dt = new DataTransfer(); dt.items.add(file); input.files = dt.files;
+    input.dispatchEvent(new Event('change'));
+  });
+});
 </script>
-
 </body>
 </html>
