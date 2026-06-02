@@ -2,55 +2,68 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Local Ooona Validator</title>
+    <title>Professional Subtitle Validator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
-        .panel { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; background: white; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        .error-row { background-color: #fff0f0; }
-        .error-badge { color: red; font-weight: bold; font-size: 0.8em; }
+        :root { --primary: #000; --bg: #fff; --border: #eee; --error-bg: #fff0f0; }
+        body { font-family: 'Courier New', monospace; padding: 20px; background: var(--bg); }
+        .wrap { max-width: 900px; margin: auto; }
+        .drop-zone { border: 2px dashed #ccc; padding: 30px; text-align: center; margin-bottom: 20px; cursor: pointer; }
+        .run-btn { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
+        .has-error { background: var(--error-bg); }
     </style>
 </head>
 <body>
 
-<h2>Local Subtitle Validator (No API)</h2>
+<div class="wrap">
+    <h2>Subtitle QC Tool</h2>
+    <div style="display: flex; gap: 20px;">
+        <div class="drop-zone" onclick="document.getElementById('fileSub').click()">
+            <input type="file" id="fileSub" hidden accept=".ooona,.json,.xml">
+            <p>Upload Subtitle (.ooona)</p>
+        </div>
+        <div class="drop-zone" onclick="document.getElementById('fileGuide').click()">
+            <input type="file" id="fileGuide" hidden accept=".docx,.txt,.pptx,.hwpx">
+            <p>Upload Guidelines (.docx, .txt, etc)</p>
+        </div>
+    </div>
+    
+    <button class="run-btn" id="runBtn">RUN QUALITY CHECK</button>
 
-<div class="panel">
-    <input type="file" id="ooonaFile" accept=".json,.ooona">
-    <input type="file" id="docFile" accept=".docx,.txt">
-    <button id="runBtn">Run Local Check</button>
+    <table id="resultsTable" style="display:none;">
+        <thead><tr><th>#</th><th>Subtitle Text</th><th>Issues</th></tr></thead>
+        <tbody id="tblBody"></tbody>
+    </table>
 </div>
 
-<table id="resultTable" style="display:none;">
-    <thead><tr><th>ID</th><th>Text</th><th>Result</th></tr></thead>
-    <tbody id="subBody"></tbody>
-</table>
-
 <script>
-    let subtitles = [];
-    let guideText = "";
+    let subData = [], guideText = "";
 
-    // 1. Load Ooona File
-    document.getElementById('ooonaFile').onchange = async (e) => {
+    // 1. Handle Subtitle Upload (JSON/XML)
+    document.getElementById('fileSub').onchange = async (e) => {
         const text = await e.target.files[0].text();
-        const data = JSON.parse(text);
-        // Recursively find the array containing objects with a 'text' property
-        const findSubs = (obj) => {
-            if (Array.isArray(obj) && obj[0]?.text) return obj;
-            for (let key in obj) {
-                if (typeof obj[key] === 'object') {
-                    const found = findSubs(obj[key]);
-                    if (found) return found;
-                }
-            }
-        };
-        subtitles = findSubs(data) || [];
+        // Simple heuristic: if starts with <, treat as XML, else JSON
+        if (text.trim().startsWith('<')) {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, "text/xml");
+            // Extract text nodes (Update selector based on your XML structure)
+            subData = Array.from(xml.querySelectorAll('Subtitle')).map((n, i) => ({ id: i+1, text: n.textContent }));
+        } else {
+            const json = JSON.parse(text);
+            // Recursive helper to find subtitle arrays
+            const find = (o) => {
+                if (Array.isArray(o) && o[0]?.text) return o;
+                for (let k in o) if (typeof o[k] === 'object') return find(o[k]);
+            };
+            subData = find(json) || [];
+        }
+        alert("Subtitles loaded: " + subData.length);
     };
 
-    // 2. Load Guidelines
-    document.getElementById('docFile').onchange = async (e) => {
+    // 2. Handle Guideline Upload
+    document.getElementById('fileGuide').onchange = async (e) => {
         const file = e.target.files[0];
         if (file.name.endsWith('.docx')) {
             const res = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
@@ -58,36 +71,24 @@
         } else {
             guideText = (await file.text()).toLowerCase();
         }
+        alert("Guidelines loaded.");
     };
 
-    // 3. Local Error Logic
+    // 3. Run Logic
     document.getElementById('runBtn').onclick = () => {
-        const tbody = document.getElementById('subBody');
+        const tbody = document.getElementById('tblBody');
         tbody.innerHTML = "";
-        document.getElementById('resultTable').style.display = "table";
+        document.getElementById('resultsTable').style.display = "table";
 
-        subtitles.forEach((sub, index) => {
-            let errors = [];
-            
-            // Example Local Rule: Max 42 characters
-            if (sub.text.length > 42) errors.push("Too long (>42 chars)");
-            
-            // Example Local Rule: Check if line exists in guidelines
-            if (!guideText.includes(sub.text.toLowerCase().substring(0, 10))) {
-                errors.push("Missing context in guidelines");
-            }
-
+        subData.forEach((sub, i) => {
+            const isError = !guideText.includes(sub.text.toLowerCase().substring(0, 10));
             const row = tbody.insertRow();
-            if (errors.length > 0) row.className = "error-row";
-            
-            row.insertCell(0).innerText = index + 1;
+            if (isError) row.className = "has-error";
+            row.insertCell(0).innerText = i + 1;
             row.insertCell(1).innerText = sub.text;
-            row.insertCell(2).innerHTML = errors.length > 0 
-                ? `<span class="error-badge">${errors.join(', ')}</span>` 
-                : "Pass";
+            row.insertCell(2).innerText = isError ? "⚠ Term mismatch" : "OK";
         });
     };
 </script>
-
 </body>
 </html>
