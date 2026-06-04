@@ -5,9 +5,13 @@
     <title>Subtitle Quality Auditor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Fix for PDF Worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
     <style>
         body { font-family: sans-serif; padding: 20px; line-height: 1.5; }
-        .upload-box { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; }
+        .upload-box { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #f4f4f4; }
@@ -19,14 +23,14 @@
     <h1>Ooona Subtitle Audit Tool</h1>
 
     <div class="upload-box">
-        <label>1. Upload .ooona (JSON format):</label>
+        <label><strong>1. Upload .ooona (JSON format):</strong></label><br>
         <input type="file" id="ooonaFile" accept=".ooona,.json"><br><br>
         
-        <label>2. Upload Guidelines (.docx, .pdf, .txt):</label>
+        <label><strong>2. Upload Guidelines (.docx, .pdf, .txt):</strong></label><br>
         <input type="file" id="guideFile" accept=".docx,.pdf,.txt">
     </div>
 
-    <button onclick="processFiles()">Parse and Audit</button>
+    <button onclick="processFiles()" style="padding: 10px 20px;">Parse and Audit</button>
 
     <div id="resultArea"></div>
 
@@ -34,30 +38,46 @@
         async function processFiles() {
             const ooonaFile = document.getElementById('ooonaFile').files[0];
             const guideFile = document.getElementById('guideFile').files[0];
+            const resultArea = document.getElementById('resultArea');
 
             if (!ooonaFile || !guideFile) return alert("Please upload both files.");
 
-            // 1. Process .ooona JSON
-            const jsonText = await ooonaFile.text();
-            const data = JSON.parse(jsonText);
-            const subtitles = data.events || data;
+            try {
+                // 1. Process .ooona JSON
+                const ooonaText = await ooonaFile.text();
+                const data = JSON.parse(ooonaText);
+                
+                // Auto-detect array
+                let subtitles = Array.isArray(data) ? data : null;
+                if (!subtitles) {
+                    for (let key in data) {
+                        if (Array.isArray(data[key])) {
+                            subtitles = data[key];
+                            break;
+                        }
+                    }
+                }
 
-            // 2. Process Guidelines based on file extension
-            let guidelinesText = await extractText(guideFile);
-            
-            // 3. Render Output
-            renderTable(subtitles, guidelinesText);
+                if (!subtitles) throw new Error("Could not find subtitle array in JSON.");
+
+                // 2. Process Guidelines
+                const guidelinesText = await extractText(guideFile);
+                
+                // 3. Render
+                renderTable(subtitles, guidelinesText);
+
+            } catch (err) {
+                resultArea.innerHTML = `<p style="color:red">Error: ${err.message}</p>`;
+            }
         }
 
         async function extractText(file) {
             const ext = file.name.split('.').pop().toLowerCase();
-            
             if (ext === 'docx') {
                 const arrayBuffer = await file.arrayBuffer();
                 const result = await mammoth.extractRawText({arrayBuffer});
                 return result.value;
             } 
-            
             if (ext === 'pdf') {
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
@@ -69,17 +89,21 @@
                 }
                 return text;
             }
-
-            return await file.text(); // Default for .txt
+            return await file.text();
         }
 
         function renderTable(subs, rules) {
             let html = `<table><tr><th>Start</th><th>End</th><th>Text</th><th>Status</th></tr>`;
             subs.forEach(s => {
-                // Placeholder: Add your specific logic to compare 's.text' against 'rules'
+                // Accessing text. Adjust properties if your JSON uses different keys (e.g. s.content)
+                const text = s.text || s.content || "";
                 const hasError = false; 
-                html += `<tr><td>${s.start}</td><td>${s.end}</td><td>${s.text}</td>
-                         <td class="${hasError ? 'error' : ''}">${hasError ? 'Violation' : 'Pass'}</td></tr>`;
+                html += `<tr>
+                    <td>${s.start || ""}</td>
+                    <td>${s.end || ""}</td>
+                    <td>${text}</td>
+                    <td class="${hasError ? 'error' : ''}">${hasError ? 'Violation' : 'OK'}</td>
+                </tr>`;
             });
             html += `</table>`;
             document.getElementById('resultArea').innerHTML = html;
