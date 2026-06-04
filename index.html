@@ -18,12 +18,12 @@
     <div class="controls">
         <label>1. Upload OOONA File (JSON): </label>
         <input type="file" id="ooonaFile"><br><br>
-        <label>2. Upload Guidelines (DOCX/PDF): </label>
+        <label>2. Upload Guidelines (DOCX): </label>
         <input type="file" id="guidelinesFile">
-        <p><small id="status">Status: Waiting for guidelines...</small></p>
+        <p><strong id="status">Status: Waiting for both files...</strong></p>
     </div>
 
-    <table>
+    <table id="resultTable" style="display:none;">
         <thead><tr><th>Index</th><th>Text</th><th>Error / Status</th></tr></thead>
         <tbody id="tableBody"></tbody>
     </table>
@@ -32,20 +32,27 @@
         let guidelinesText = null;
         let lastParsedData = null;
 
+        function checkAndProcess() {
+            if (guidelinesText && lastParsedData) {
+                renderTable(lastParsedData);
+                document.getElementById('resultTable').style.display = 'table';
+                document.getElementById('status').innerText = "Status: Guidelines applied. Showing results.";
+            }
+        }
+
         document.getElementById('guidelinesFile').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             const arrayBuffer = await file.arrayBuffer();
             const result = await mammoth.extractRawText({arrayBuffer});
             guidelinesText = result.value.toLowerCase();
-            document.getElementById('status').innerText = "Status: Guidelines Loaded! Ready to process.";
-            if(lastParsedData) renderTable(lastParsedData);
+            checkAndProcess();
         });
 
         document.getElementById('ooonaFile').addEventListener('change', function(e) {
             const reader = new FileReader();
             reader.onload = function(event) {
                 lastParsedData = JSON.parse(event.target.result).Paragraphs;
-                renderTable(lastParsedData);
+                checkAndProcess();
             };
             reader.readAsText(e.target.files[0]);
         });
@@ -55,16 +62,12 @@
             tbody.innerHTML = '';
             
             paragraphs.forEach(para => {
-                // Preserve line breaks by joining with newline characters
                 const text = para.Lines.map(l => l.Text.replace(/<[^>]*>/g, '')).join('\n');
                 const qcError = para.QcErrorCode || "";
                 
                 let manualError = "";
-                // Only run validation if guidelines exist
-                if (guidelinesText) {
-                    if (guidelinesText.includes("no periods") && text.includes(".")) manualError = "Violation: Period found.";
-                    if (guidelinesText.includes("max chars") && text.length > 50) manualError = "Violation: Too many characters.";
-                }
+                if (guidelinesText.includes("no periods") && text.includes(".")) manualError = "Violation: Period found.";
+                if (guidelinesText.includes("max chars") && text.length > 50) manualError = "Violation: Too many characters.";
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
