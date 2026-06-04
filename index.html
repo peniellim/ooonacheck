@@ -2,95 +2,61 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Ooona Subtitle Checker</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+    <title>Subtitle Validator</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
-        .wrap { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 8px; }
-        .top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 20px; }
-        .drop-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; cursor: pointer; }
-        .run-btn { width: 100%; padding: 15px; background: #000; color: white; border: none; cursor: pointer; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        .has-error { background: #fff0f0; color: #d00; }
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+        .container { border: 1px solid #ccc; padding: 1.5rem; border-radius: 8px; }
+        .upload-section { margin-bottom: 1.5rem; }
+        #results { margin-top: 1rem; white-space: pre-wrap; background: #f4f4f4; padding: 1rem; }
     </style>
 </head>
 <body>
 
-<div class="wrap">
-    <h2>Subtitle QC Tool</h2>
-    <div class="top-row">
-        <div class="drop-zone" onclick="document.getElementById('fileSub').click()">
-            <input type="file" id="fileSub" hidden accept=".ooona,.json,.xml">
-            <p>Upload .ooona File</p>
-        </div>
-        <div class="drop-zone" onclick="document.getElementById('fileGuide').click()">
-            <input type="file" id="fileGuide" hidden accept=".docx,.txt">
-            <p>Upload Guidelines</p>
-        </div>
+<div class="container">
+    <h1>Subtitle Quality Checker</h1>
+    
+    <div class="upload-section">
+        <label>1. Upload Ooona (.subs) file:</label>
+        <input type="file" id="subsFile" accept=".subs,.txt">
     </div>
-    <button class="run-btn" id="runBtn">RUN QUALITY CHECK</button>
-    <table id="resultsTable" style="display:none;">
-        <thead><tr><th>#</th><th>Subtitle Text</th><th>Status</th></tr></thead>
-        <tbody id="tblBody"></tbody>
-    </table>
+
+    <div class="upload-section">
+        <label>2. Upload Guidelines (.txt, .docx, .pdf):</label>
+        <input type="file" id="guidelinesFile" accept=".txt,.docx,.pdf">
+    </div>
+
+    <button onclick="processFiles()">Analyze Subtitles</button>
+
+    <div id="results"></div>
 </div>
 
 <script>
-    let subData = [], guideText = "";
+    async function processFiles() {
+        const subsInput = document.getElementById('subsFile').files[0];
+        const guideInput = document.getElementById('guidelinesFile').files[0];
+        const resultsDiv = document.getElementById('results');
 
-    // Recursive search to find the subtitle array inside complex JSON
-    function findSubtitles(obj) {
-        if (!obj || typeof obj !== 'object') return null;
-        if (Array.isArray(obj)) {
-            // Check if this array contains objects that look like subtitles
-            if (obj.length > 0 && (obj[0].text || obj[0].content || obj[0].value)) {
-                return obj;
-            }
-            return null;
+        if (!subsInput || !guideInput) {
+            alert("Please upload both files.");
+            return;
         }
-        for (let key in obj) {
-            const found = findSubtitles(obj[key]);
-            if (found) return found;
-        }
-        return null;
+
+        // Logic for reading text files
+        const readerSubs = new FileReader();
+        const readerGuide = new FileReader();
+
+        readerSubs.onload = (e) => {
+            const subsContent = e.target.result;
+            // Parse Ooona: Split by newline or standard tab-delimited format
+            const lines = subsContent.split('\n');
+            resultsDiv.innerText = "Parsed Subtitle Cells:\n" + lines.join('\n');
+        };
+
+        readerSubs.readAsText(subsInput);
+        // Note: For .docx or .pdf, you would implement a library parser here
+        readerGuide.readAsText(guideInput);
     }
-
-    document.getElementById('fileSub').onchange = async (e) => {
-        const text = await e.target.files[0].text();
-        const json = JSON.parse(text);
-        subData = findSubtitles(json) || [];
-        alert("Subtitles loaded: " + subData.length);
-    };
-
-    document.getElementById('fileGuide').onchange = async (e) => {
-        const file = e.target.files[0];
-        if (file.name.endsWith('.docx')) {
-            const res = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
-            guideText = res.value.toLowerCase();
-        } else {
-            guideText = (await file.text()).toLowerCase();
-        }
-        alert("Guidelines loaded.");
-    };
-
-    document.getElementById('runBtn').onclick = () => {
-        const tbody = document.getElementById('tblBody');
-        tbody.innerHTML = "";
-        document.getElementById('resultsTable').style.display = "table";
-
-        subData.forEach((sub, i) => {
-            const text = sub.text || sub.content || sub.value || "";
-            // Error logic: check if subtitle text exists in guidelines
-            const isError = !guideText.includes(text.toLowerCase().substring(0, 10));
-            
-            const row = tbody.insertRow();
-            if (isError) row.className = "has-error";
-            row.insertCell(0).innerText = i + 1;
-            row.insertCell(1).innerText = text;
-            row.insertCell(2).innerText = isError ? "⚠ Mismatch" : "OK";
-        });
-    };
 </script>
+
 </body>
 </html>
