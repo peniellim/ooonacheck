@@ -12,22 +12,18 @@
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background: #f4f4f4; }
-        pre { background: #f0f0f0; padding: 10px; }
     </style>
 </head>
 <body>
 
     <h1>Ooona Subtitle Audit Tool</h1>
-
     <div class="box">
         <label>1. Upload .ooona file:</label><br>
         <input type="file" id="ooonaFile"><br><br>
         <label>2. Upload Guidelines (.docx, .pdf, .txt):</label><br>
         <input type="file" id="guideFile">
     </div>
-
     <button onclick="processFiles()">Parse and Audit</button>
-
     <div id="resultArea"></div>
 
     <script>
@@ -39,36 +35,33 @@
             const text = await file.text();
             const data = JSON.parse(text);
 
-            // LOGIC: If the file is an object, find the first key that is an array
-            let subs = Array.isArray(data) ? data : null;
-            let keyName = "Root";
+            // LOGIC: Find the array that is NOT "Warnings"
+            let subs = null;
+            let keyName = "";
 
-            if (!subs) {
-                for (let k in data) {
-                    if (Array.isArray(data[k])) {
-                        subs = data[k];
-                        keyName = k;
-                        break;
-                    }
+            for (let k in data) {
+                if (Array.isArray(data[k]) && k !== "Warnings" && data[k].length > 0) {
+                    subs = data[k];
+                    keyName = k;
+                    break;
                 }
             }
 
             if (!subs) {
-                resultArea.innerHTML = "<h3>Error: No array found.</h3><p>File structure keys: " + Object.keys(data).join(', ') + "</p>";
+                resultArea.innerHTML = "<h3>Error: Could not find subtitle data.</h3><p>Keys found: " + Object.keys(data).join(', ') + "</p>";
                 return;
             }
 
-            // Display Table
             let html = `<h3>Detected Subtitles in key: "${keyName}"</h3>`;
             html += `<table><tr><th>Start</th><th>End</th><th>Text</th><th>Status</th></tr>`;
             
             subs.forEach(s => {
-                // We use dynamic keys here: search for common names for 'text', 'start', 'end'
+                // Mapping typical Ooona keys
                 const start = s.start || s.startTime || s.start_time || "";
                 const end = s.end || s.endTime || s.end_time || "";
-                const content = s.text || s.content || s.translation || s.c || "";
+                const content = s.text || s.content || s.translation || "";
                 
-                html += `<tr><td>${start}</td><td>${end}</td><td>${content}</td><td>Ready</td></tr>`;
+                html += `<tr><td>${start}</td><td>${end}</td><td>${content}</td><td>Pending</td></tr>`;
             });
             
             html += `</table>`;
