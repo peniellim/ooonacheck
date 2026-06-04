@@ -2,80 +2,81 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>JSON Subtitle Checker</title>
+    <title>Subtitle Quality Auditor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-        .container { border: 1px solid #ccc; padding: 1.5rem; border-radius: 8px; }
-        .upload-section { margin-bottom: 1.5rem; }
-        #results { margin-top: 1rem; background: #f9f9f9; padding: 1rem; border: 1px solid #eee; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 20px; line-height: 1.6; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .error { background-color: #ffcccc; color: #d8000c; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Ooona JSON Validator</h1>
-    
-    <div class="upload-section">
-        <label>1. Upload .ooona (JSON) file:</label>
-        <input type="file" id="jsonFile" accept=".ooona,.json">
+    <h1>Subtitle Audit Tool</h1>
+
+    <div class="grid-container">
+        <div>
+            <label>1. Upload .ooona (JSON):</label>
+            <input type="file" id="jsonInput" accept=".json">
+        </div>
+        <div>
+            <label>2. Upload Guidelines (docx, pdf, txt):</label>
+            <input type="file" id="guideInput">
+        </div>
     </div>
 
-    <div class="upload-section">
-        <label>2. Upload Guidelines (.txt or .docx):</label>
-        <input type="file" id="guideFile" accept=".txt,.docx">
-    </div>
+    <button onclick="processAudit()" style="margin-top: 20px; padding: 10px 20px;">Run Audit</button>
 
-    <button onclick="analyzeFiles()">Analyze Subtitles</button>
+    <div id="resultArea"></div>
 
-    <div id="results">Upload files to begin analysis.</div>
-</div>
+    <script>
+        async function processAudit() {
+            const jsonFile = document.getElementById('jsonInput').files[0];
+            const guideFile = document.getElementById('guideInput').files[0];
 
-<script>
-    async function analyzeFiles() {
-        const jsonInput = document.getElementById('jsonFile').files[0];
-        const guideInput = document.getElementById('guideFile').files[0];
-        const resultsDiv = document.getElementById('results');
+            if (!jsonFile || !guideFile) return alert("Please upload both files.");
 
-        if (!jsonInput || !guideInput) {
-            alert("Please upload both files.");
-            return;
+            // 1. Load JSON Subtitles
+            const jsonText = await jsonFile.text();
+            const subtitles = JSON.parse(jsonText); 
+            
+            // 2. Load Guidelines (Simplified text extraction)
+            let guidelines = await extractTextFromDoc(guideFile);
+
+            // 3. Render Table
+            renderSubtitleTable(subtitles, guidelines);
         }
 
-        try {
-            // 1. Process JSON
-            const jsonText = await jsonInput.text();
-            const subtitleData = JSON.parse(jsonText);
-            
-            // Adjust 'subtitleArray' based on your actual JSON structure
-            // Example assuming a structure like { "subtitles": [...] }
-            const subtitles = subtitleData.subtitles || subtitleData; 
-
-            // 2. Process Guidelines
-            let guideText = "";
-            if (guideInput.name.endsWith('.docx')) {
-                const arrayBuffer = await guideInput.arrayBuffer();
-                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
-                guideText = result.value;
-            } else {
-                guideText = await guideInput.text();
+        async function extractTextFromDoc(file) {
+            // This function acts as a router for different file types
+            if (file.name.endsWith('.txt')) return await file.text();
+            if (file.name.endsWith('.docx')) {
+                const arrayBuffer = await file.arrayBuffer();
+                const result = await mammoth.extractRawText({arrayBuffer});
+                return result.value;
             }
-
-            // 3. Display Results
-            let output = "<h3>Subtitle List:</h3><ul>";
-            subtitles.forEach((s, index) => {
-                output += `<li><strong>${index + 1}:</strong> ${s.text || s.content || "N/A"}</li>`;
-            });
-            output += "</ul>";
-            
-            resultsDiv.innerHTML = output;
-            console.log("Guidelines loaded for comparison:", guideText);
-            
-        } catch (err) {
-            resultsDiv.innerText = "Error: " + err.message;
+            return "Guidelines loaded (Binary format detected).";
         }
-    }
-</script>
 
+        function renderSubtitleTable(data, guidelines) {
+            let html = `<table><tr><th>Start</th><th>End</th><th>Text</th><th>Status</th></tr>`;
+            data.forEach(sub => {
+                // Example Logic: Simple check if sub exceeds a hypothetical length constraint
+                const hasError = sub.text.length > 40; 
+                html += `<tr>
+                    <td>${sub.start}</td>
+                    <td>${sub.end}</td>
+                    <td>${sub.text}</td>
+                    <td class="${hasError ? 'error' : ''}">${hasError ? 'Length Warning' : 'OK'}</td>
+                </tr>`;
+            });
+            html += `</table>`;
+            document.getElementById('resultArea').innerHTML = html;
+        }
+    </script>
 </body>
 </html>
