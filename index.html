@@ -1,88 +1,526 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Subtitle QA Tool</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
-    <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .error { color: red; font-weight: bold; background: #fff0f0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; white-space: pre-wrap; }
-        .controls { background: #f4f4f4; padding: 15px; border-radius: 5px; }
-    </style>
-</head>
-<body>
 
-    <h2>OOONA Subtitle Validator</h2>
-    <div class="controls">
-        <label>1. Upload OOONA File (JSON): </label>
-        <input type="file" id="ooonaFile"><br><br>
-        <label>2. Upload Guidelines (DOCX): </label>
-        <input type="file" id="guidelinesFile">
-        <p><strong id="status">Status: Waiting for both files...</strong></p>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary);font-size:14px}
+.wrap{padding:1rem 0}
+h1{font-size:20px;font-weight:500;margin-bottom:4px}
+.sub-head{font-size:13px;color:var(--color-text-secondary);margin-bottom:1.4rem}
+.upload-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.dz{border:1.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:1.25rem 1rem;text-align:center;cursor:pointer;background:var(--color-background-secondary);position:relative;transition:border-color .15s}
+.dz:hover{border-color:var(--color-border-primary)}
+.dz.loaded{border-style:solid;border-color:#1D9E75}
+.dz input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.dz-icon{font-size:26px;display:block;margin-bottom:6px;color:var(--color-text-secondary)}
+.dz.loaded .dz-icon{color:#1D9E75}
+.dz-lbl{font-size:13px;font-weight:500}
+.dz-ext{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.dz-fn{font-size:11px;color:#1D9E75;margin-top:5px;word-break:break-all;font-weight:500;min-height:14px}
+.dz-req{font-size:10px;color:#A32D2D;margin-top:3px}
+.alert{border-radius:var(--border-radius-md);padding:9px 13px;font-size:12.5px;margin-bottom:10px;display:none;line-height:1.5}
+.a-info{background:#E6F1FB;color:#0C447C}
+.a-warn{background:#FAEEDA;color:#633806}
+.a-err{background:#FCEBEB;color:#791F1F}
+.a-ok{background:#EAF3DE;color:#27500A}
+.rules-preview{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px 14px;margin-bottom:12px;display:none}
+.rules-preview h3{font-size:12px;font-weight:500;margin-bottom:8px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:.04em}
+.rule-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:11px;padding:3px 10px;border-radius:20px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);color:var(--color-text-primary);line-height:1.4}
+.chip.c-found{border-color:#1D9E75;color:#0F6E56}
+.chip.c-default{border-color:var(--color-border-tertiary);color:var(--color-text-secondary)}
+.run-btn{width:100%;padding:10px;font-size:14px;font-weight:500;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);cursor:pointer;margin-bottom:14px;transition:background .12s}
+.run-btn:hover:not(:disabled){background:var(--color-background-secondary)}
+.run-btn:disabled{opacity:.4;cursor:not-allowed}
+.sum-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.sc{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px}
+.sc .v{font-size:22px;font-weight:500}
+.sc .l{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.sc.err .v{color:#A32D2D}
+.sc.wrn .v{color:#854F0B}
+.sc.ok .v{color:#0F6E56}
+.filters{display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.fb{font-size:12px;padding:4px 12px;border:0.5px solid var(--color-border-secondary);border-radius:20px;cursor:pointer;background:var(--color-background-primary);color:var(--color-text-secondary)}
+.fb.on{border-color:var(--color-border-primary);color:var(--color-text-primary);font-weight:500}
+.fb.fe.on{background:#FCEBEB;border-color:#E24B4A;color:#A32D2D}
+.fb.fw.on{background:#FAEEDA;border-color:#BA7517;color:#854F0B}
+.fb.fo.on{background:#EAF3DE;border-color:#639922;color:#3B6D11}
+.bdg{font-size:10px;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:500}
+.tbl-wrap{max-height:560px;overflow-y:auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md)}
+table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+th{text-align:left;font-weight:500;font-size:11px;color:var(--color-text-secondary);padding:6px 9px;border-bottom:0.5px solid var(--color-border-tertiary);position:sticky;top:0;background:var(--color-background-primary);z-index:1}
+td{padding:6px 9px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:top;overflow-wrap:break-word}
+.re td{background:#FEF2F2}
+.rw td{background:#FFFBEB}
+.re td:first-child{border-left:3px solid #E24B4A}
+.rw td:first-child{border-left:3px solid #EF9F27}
+.tc{font-family:var(--font-mono);font-size:10.5px;color:var(--color-text-secondary);white-space:nowrap}
+.tx{line-height:1.5}
+.tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:8px;margin:1px 2px 1px 0;white-space:nowrap}
+.te{background:#F7C1C1;color:#791F1F}
+.tw{background:#FAC775;color:#633806}
+.num{color:var(--color-text-secondary);font-size:11px}
+</style>
+
+<div class="wrap">
+  <h2 class="sr-only">Subtitle QC checker — guideline-driven</h2>
+  <h1><i class="ti ti-check" aria-hidden="true" style="color:#1D9E75;margin-right:6px"></i>Subtitle QC checker</h1>
+  <p class="sub-head">Upload your <strong>.ooona</strong> subtitle file and the <strong>style guideline</strong> document. All QC rules are read from the guideline.</p>
+
+  <div class="upload-row">
+    <div class="dz" id="dz1">
+      <input type="file" id="f-sub" accept=".ooona,.json" onchange="onSubFile(this)">
+      <i class="ti ti-subtitles dz-icon" aria-hidden="true"></i>
+      <div class="dz-lbl">Subtitle file</div>
+      <div class="dz-ext">.ooona</div>
+      <div class="dz-fn" id="fn1"></div>
+      <div class="dz-req" id="req1"></div>
     </div>
+    <div class="dz" id="dz2">
+      <input type="file" id="f-guide" accept=".txt,.pdf,.docx,.doc" onchange="onGuideFile(this)">
+      <i class="ti ti-file-description dz-icon" aria-hidden="true"></i>
+      <div class="dz-lbl">Style guideline</div>
+      <div class="dz-ext">.txt · .docx · .pdf</div>
+      <div class="dz-fn" id="fn2"></div>
+      <div class="dz-req" id="req2"></div>
+    </div>
+  </div>
 
-    <table id="resultTable" style="display:none;">
-        <thead><tr><th>Index</th><th>Text</th><th>Error / Status</th></tr></thead>
-        <tbody id="tableBody"></tbody>
-    </table>
+  <div class="alert a-info" id="al-sub"></div>
+  <div class="alert a-info" id="al-guide"></div>
+  <div class="alert a-warn" id="al-warn"></div>
+  <div class="alert a-err"  id="al-err"></div>
 
-    <script>
-        let guidelinesText = null;
-        let lastParsedData = null;
+  <div class="rules-preview" id="rules-preview">
+    <h3><i class="ti ti-list-check" aria-hidden="true" style="margin-right:4px"></i>Rules extracted from guideline</h3>
+    <div class="rule-chips" id="rule-chips"></div>
+  </div>
 
-        function checkAndProcess() {
-            if (guidelinesText && lastParsedData) {
-                renderTable(lastParsedData);
-                document.getElementById('resultTable').style.display = 'table';
-                document.getElementById('status').innerText = "Status: Guidelines applied. Showing results.";
-            }
-        }
+  <button class="run-btn" id="run-btn" onclick="runQC()" disabled>
+    <i class="ti ti-player-play" aria-hidden="true" style="margin-right:5px"></i>Run QC checks
+  </button>
 
-        document.getElementById('guidelinesFile').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            const arrayBuffer = await file.arrayBuffer();
-            const result = await mammoth.extractRawText({arrayBuffer});
-            guidelinesText = result.value.toLowerCase();
-            checkAndProcess();
-        });
+  <div id="out"></div>
+</div>
 
-        document.getElementById('ooonaFile').addEventListener('change', function(e) {
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                lastParsedData = JSON.parse(event.target.result).Paragraphs;
-                checkAndProcess();
-            };
-            reader.readAsText(e.target.files[0]);
-        });
+<script>
+// ─── State ────────────────────────────────────────────────
+let parsedSubs   = [];
+let guideRules   = null;   // extracted from guideline doc
+let guideLoaded  = false;
+let subLoaded    = false;
+let fps          = 23.976;
 
-        function renderTable(paragraphs) {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-            
-            paragraphs.forEach(para => {
-                const text = para.Lines.map(l => l.Text.replace(/<[^>]*>/g, '')).join('\n');
-                const qcError = para.QcErrorCode || "";
-                
-                let manualError = "";
-                if (guidelinesText.includes("no periods") && text.includes(".")) manualError = "Violation: Period found.";
-                if (guidelinesText.includes("max chars") && text.length > 50) manualError = "Violation: Too many characters.";
+// ─── Utility ──────────────────────────────────────────────
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const p2  = n  => String(Math.round(n)).padStart(2,'0');
 
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${para.Index}</td>
-                    <td>${text}</td>
-                    <td class="${qcError || manualError ? 'error' : ''}">
-                        ${qcError ? 'QC: ' + qcError : ''}
-                        ${qcError && manualError ? '<br>' : ''}
-                        ${manualError ? 'Guideline: ' + manualError : ''}
-                        ${!qcError && !manualError ? 'Clean' : ''}
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-    </script>
-</body>
-</html>
+function s2smpte(sec) {
+  const tf = Math.round(sec * fps);
+  const ff = tf % Math.round(fps);
+  const ts = Math.floor(tf / Math.round(fps));
+  return `${p2(Math.floor(ts/3600))}:${p2(Math.floor((ts%3600)/60))}:${p2(ts%60)}:${p2(ff)}`;
+}
+
+function stripHtml(s) {
+  return String(s||'')
+    .replace(/<[^>]+>/g,'')
+    .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
+    .replace(/&nbsp;/g,' ').replace(/&#39;/g,"'").replace(/&quot;/g,'"');
+}
+
+function showAlert(id, html) {
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  el.innerHTML = html;
+}
+function hideAlert(id) { document.getElementById(id).style.display = 'none'; }
+
+// ─── Parse .ooona ─────────────────────────────────────────
+function parseOoona(raw) {
+  const txt  = raw.replace(/^\uFEFF/, '');
+  const data = JSON.parse(txt);
+  const cfg  = data.Configuration || {};
+  fps = cfg.Fps || 23.976;
+
+  const paras = data.Paragraphs || data.paragraphs || [];
+  if (!paras.length) throw new Error('No Paragraphs array found.');
+
+  return paras.map((p, i) => {
+    const lines = (p.Lines || p.lines || [])
+      .sort((a, b) => (a.Index||0) - (b.Index||0));
+    const text     = lines.map(l => stripHtml(l.Text || l.text || '')).join('\n');
+    const isItalic = lines.length > 0 && lines.every(l => /<span[^>]+font-style:\s*italic/i.test(l.Text||''));
+    return {
+      idx:      p.Index || (i + 1),
+      inSec:    p.Start || 0,
+      outSec:   p.End   || 0,
+      text,
+      isItalic,
+      omitted:  p.Omitted || false,
+      marked:   p.Marked  || false,
+      tags:     p.Tags    || [],
+      lines
+    };
+  });
+}
+
+function onSubFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fn1').textContent = file.name;
+  document.getElementById('dz1').classList.add('loaded');
+  hideAlert('al-err');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      parsedSubs = parseOoona(e.target.result);
+      const omitted = parsedSubs.filter(s => s.omitted).length;
+      subLoaded = true;
+      showAlert('al-sub',
+        `<i class="ti ti-check-circle" style="margin-right:5px"></i>` +
+        `<strong>${parsedSubs.length}</strong> subtitle entries loaded` +
+        (omitted ? ` · ${omitted} omitted (skipped)` : '') +
+        ` · FPS: ${fps}`);
+      tryEnableRun();
+    } catch(err) {
+      showAlert('al-err', `<i class="ti ti-alert-circle" style="margin-right:5px"></i>Parse error: ${esc(err.message)}`);
+      subLoaded = false;
+      document.getElementById('run-btn').disabled = true;
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+// ─── Guideline parser ─────────────────────────────────────
+function extractGuideRules(txt) {
+  const rules = {};
+  const t = txt;
+
+  // ── Numeric helpers ──
+  const num  = (patterns) => {
+    for (const p of [].concat(patterns)) {
+      const m = t.match(p);
+      if (m) return parseFloat(m[1] || m[2]);
+    }
+    return null;
+  };
+  const bool = (patterns) => {
+    for (const p of [].concat(patterns)) {
+      if (p.test(t)) return true;
+    }
+    return false;
+  };
+
+  // Max chars per line
+  rules.maxCharsPerLine = num([
+    /(\d+)\s*characters?\s+per\s+line/i,
+    /max(?:imum)?\s+(?:characters?|chars?)\s+per\s+line[:\s]+(\d+)/i,
+    /line\s+(?:length|limit)[:\s]+(\d+)/i,
+    /(?:characters?|chars?)\s*\/\s*line[:\s]*(\d+)/i,
+    /CPL[:\s]+(\d+)/i
+  ]);
+
+  // Max lines per subtitle
+  rules.maxLines = num([
+    /max(?:imum)?\s+(?:of\s+)?(\d+)\s+lines?\s+per\s+(?:subtitle|card|event|cue)/i,
+    /(\d+)\s+lines?\s+(?:maximum|max)\s+per\s+(?:subtitle|event|card)/i,
+    /max(?:imum)?\s+lines?\s+per\s+(?:subtitle|event|card|cue)[:\s]+(\d+)/i,
+    /maximum\s+(\d+)\s+lines/i
+  ]);
+
+  // Min / max duration
+  rules.minDuration = num([
+    /min(?:imum)?\s+duration[:\s]+(\d+\.?\d*)\s*s/i,
+    /(?:at\s+least|minimum)\s+(\d+\.?\d*)\s*seconds?\s+(?:per|for)/i,
+    /5\s*\/\s*6.*second/i  // "five-sixths of a second" → special case
+  ]);
+  if (!rules.minDuration && /5\s*[/⁄]\s*6|five.sixths?\s+of\s+a\s+second/i.test(t)) {
+    rules.minDuration = 5/6;
+    rules._minDurNote = '5/6s';
+  }
+  rules.maxDuration = num([
+    /max(?:imum)?\s+duration[:\s]+(\d+\.?\d*)\s*s/i,
+    /(\d+)\s+seconds?\s+(?:per\s+)?(?:subtitle|event|card|cue)\s+max/i,
+    /no\s+(?:subtitle|event)\s+(?:should|must)\s+exceed\s+(\d+)\s*s/i
+  ]);
+
+  // Min gap
+  rules.minGapFrames = num([
+    /min(?:imum)?\s+(?:gap|frame\s+gap|spacing)[:\s]+(\d+)\s+frames?/i,
+    /(\d+)\s+frames?\s+(?:gap|between|minimum)/i,
+    /gap\s+of\s+(?:at\s+least\s+)?(\d+)\s+frames?/i
+  ]);
+  rules.minGapMs = num([
+    /min(?:imum)?\s+(?:gap|spacing)[:\s]+(\d+)\s*ms/i,
+    /(\d+)\s*ms\s+(?:gap|between)/i
+  ]);
+  if (rules.minGapFrames && !rules.minGapMs)
+    rules.minGapMs = Math.round((rules.minGapFrames / fps) * 1000);
+
+  // CPS / reading speed
+  rules.maxCPS = num([
+    /(\d+)\s+characters?\s+per\s+second/i,
+    /max(?:imum)?\s+(?:reading\s+speed|cps)[:\s]+(\d+)/i,
+    /CPS[:\s]+(\d+)/i,
+    /reading\s+speed.*?(\d+)\s+cps/i
+  ]);
+
+  // ── Text / style rules ──
+
+  // Ellipsis style
+  if (/single\s+(?:smart\s+)?ellipsis|U\+2026|unicode.*ellipsis|(?:…)\s+not\s+three\s+dots/i.test(t))
+    rules.requireSmartEllipsis = true;
+  if (/three\s+(?:consecutive\s+)?periods|three\s+dots\s+instead/i.test(t))
+    rules.requireSmartEllipsis = true;
+
+  // Hyphen for two speakers
+  if (/hyphen.*two\s+speakers?|two\s+speakers?.*hyphen|speaker.*per\s+line.*hyphen/i.test(t))
+    rules.twoSpeakerHyphen = true;
+
+  // Italics rules
+  if (/italics?\s+(?:for\s+)?off.?screen|off.?screen.*italics?/i.test(t))
+    rules.italicsForOffscreen = true;
+
+  // No double hyphen (UK style)
+  if (/do\s+not\s+(?:use|permit)\s+double\s+hyphens?/i.test(t))
+    rules.noDoubleHyphen = true;
+
+  // Double hyphen for interruption (US style)
+  if (/double\s+hyphens?\s+(?:for|to\s+indicate)\s+(?:abrupt\s+)?interrupt/i.test(t))
+    rules.doubleHyphenForInterrupt = true;
+
+  // No ellipsis at end when sentence continues
+  if (/do\s+not\s+use\s+ellips[ei]s.*split\s+between|ongoing.*ellips/i.test(t))
+    rules.noEllipsisContinuation = true;
+
+  // Subtitle numbering / index check
+  rules.checkNumbering = bool([/subtitle.*number|sequential.*numb/i]);
+
+  return rules;
+}
+
+function rulesLabel(rules) {
+  const chips = [];
+  const add = (label, found) =>
+    chips.push(`<span class="chip ${found ? 'c-found' : 'c-default'}">${found ? '✓ ' : ''}${label}</span>`);
+
+  add(`Max ${rules.maxCharsPerLine ?? '?'} chars/line`,       rules.maxCharsPerLine != null);
+  add(`Max ${rules.maxLines ?? '?'} lines/sub`,               rules.maxLines        != null);
+  add(`Min duration ${rules.minDuration != null ? (rules._minDurNote || rules.minDuration+'s') : '?'}`,  rules.minDuration != null);
+  add(`Max duration ${rules.maxDuration ?? '?'}s`,            rules.maxDuration     != null);
+  add(`Min gap ${rules.minGapMs != null ? rules.minGapMs+'ms' : rules.minGapFrames != null ? rules.minGapFrames+'fr' : '?'}`, rules.minGapMs != null || rules.minGapFrames != null);
+  add(`Max ${rules.maxCPS ?? '?'} CPS`,                       rules.maxCPS          != null);
+  add('Smart ellipsis (U+2026)',                               rules.requireSmartEllipsis);
+  add('Two-speaker hyphen',                                    rules.twoSpeakerHyphen);
+  add('Italics = off-screen',                                  rules.italicsForOffscreen);
+  add('No double hyphen',                                      rules.noDoubleHyphen);
+  add('Double hyphen = interrupt',                             rules.doubleHyphenForInterrupt);
+  return chips.join('');
+}
+
+function onGuideFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fn2').textContent = file.name;
+  document.getElementById('dz2').classList.add('loaded');
+  const reader = new FileReader();
+  reader.onload = e => {
+    guideRules = extractGuideRules(e.target.result);
+    guideLoaded = true;
+
+    // Show extracted rules
+    const preview = document.getElementById('rules-preview');
+    preview.style.display = 'block';
+    document.getElementById('rule-chips').innerHTML = rulesLabel(guideRules);
+
+    const found = Object.values(guideRules).filter(v => v != null && v !== false).length;
+    showAlert('al-guide',
+      `<i class="ti ti-file-check" style="margin-right:5px"></i>` +
+      `<strong>${found}</strong> rule(s) extracted from <em>${esc(file.name)}</em>. ` +
+      (found < 3 ? 'Few rules detected — the guideline may be a PDF with embedded text or an unsupported format. Text (.txt) guidelines work best.' : 'Greyed chips = rule not found in document, default values will be used.')
+    );
+    tryEnableRun();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function tryEnableRun() {
+  document.getElementById('run-btn').disabled = !(subLoaded && guideLoaded);
+}
+
+// ─── QC checks ────────────────────────────────────────────
+function qcOne(s, i, all, R) {
+  const issues = [];
+
+  // Defaults for any rule not found in guide
+  const maxCh    = R.maxCharsPerLine ?? 42;
+  const maxLn    = R.maxLines        ?? 2;
+  const minDur   = R.minDuration     ?? 0.833;
+  const maxDur   = R.maxDuration     ?? 7;
+  const minGapMs = R.minGapMs        ?? (R.minGapFrames != null ? Math.round(R.minGapFrames/fps*1000) : 80);
+  const maxCPS   = R.maxCPS          ?? 17;
+
+  const dur   = s.outSec - s.inSec;
+  const lines = s.text.split('\n');
+  const cps   = dur > 0 ? s.text.replace(/\n/g,'').length / dur : 0;
+
+  // ── Timing ──
+  if (s.outSec > 0 && s.inSec >= s.outSec)
+    issues.push({t:'error', msg:'In ≥ out timecode'});
+
+  if (dur > 0 && dur < minDur)
+    issues.push({t:'error', msg:`Duration ${dur.toFixed(3)}s < min ${minDur.toFixed(3)}s`});
+
+  if (dur > maxDur)
+    issues.push({t:'warning', msg:`Duration ${dur.toFixed(2)}s > max ${maxDur}s`});
+
+  // ── Gap / overlap ──
+  if (i > 0) {
+    let prev = null;
+    for (let j = i-1; j >= 0; j--) { if (!all[j].omitted){ prev = all[j]; break; } }
+    if (prev) {
+      const gapMs = (s.inSec - prev.outSec) * 1000;
+      if (gapMs < 0)
+        issues.push({t:'error', msg:`Overlaps prev by ${Math.abs(Math.round(gapMs))}ms`});
+      else if (gapMs < minGapMs)
+        issues.push({t:'warning', msg:`Gap ${Math.round(gapMs)}ms < min ${minGapMs}ms`});
+    }
+  }
+
+  // ── Line count ──
+  if (lines.length > maxLn)
+    issues.push({t:'error', msg:`${lines.length} lines (max ${maxLn})`});
+
+  // ── Per-line checks ──
+  lines.forEach((l, li) => {
+    if (l.length > maxCh)
+      issues.push({t:'error', msg:`Line ${li+1}: ${l.length} chars (max ${maxCh})`});
+  });
+
+  // ── CPS ──
+  if (cps > maxCPS && dur > 0)
+    issues.push({t:'error', msg:`${cps.toFixed(1)} CPS > max ${maxCPS}`});
+
+  // ── Empty subtitle ──
+  if (!s.text.trim())
+    issues.push({t:'error', msg:'Empty subtitle'});
+
+  // ── Double spaces ──
+  if (/  +/.test(s.text))
+    issues.push({t:'warning', msg:'Double spaces in text'});
+
+  // ── Leading / trailing spaces within a line ──
+  if (/^[ \t]|[ \t]$/m.test(s.text))
+    issues.push({t:'warning', msg:'Leading or trailing spaces'});
+
+  // ── Smart ellipsis rule ──
+  if (R.requireSmartEllipsis && /\.{2,}/.test(s.text))
+    issues.push({t:'error', msg:'Use smart ellipsis … (U+2026), not ...'});
+
+  // ── No double hyphen (UK style) ──
+  if (R.noDoubleHyphen && /--/.test(s.text))
+    issues.push({t:'error', msg:'Double hyphen not permitted — use ellipsis'});
+
+  // ── Double hyphen = interruption only (US style) ──
+  if (R.doubleHyphenForInterrupt && /--/.test(s.text) && !/[!?]/.test(s.text.split('--')[0].slice(-1)))
+    issues.push({t:'warning', msg:'Double hyphen: confirm this marks an interruption'});
+
+  // ── Two-speaker hyphen: if 2 lines, each should start with hyphen or neither should ──
+  if (R.twoSpeakerHyphen && lines.length === 2) {
+    const l1H = lines[0].trim().startsWith('-');
+    const l2H = lines[1].trim().startsWith('-');
+    if (l1H !== l2H)
+      issues.push({t:'warning', msg:'Inconsistent speaker hyphens (one line missing -)'});
+  }
+
+  return issues;
+}
+
+// ─── Render ───────────────────────────────────────────────
+let checked    = [];
+let curFilter  = 'all';
+
+function runQC() {
+  if (!parsedSubs.length || !guideRules) return;
+  const active = parsedSubs.filter(s => !s.omitted);
+  checked = active.map((s, i) => ({ ...s, issues: qcOne(s, i, active, guideRules) }));
+  curFilter = 'all';
+  renderTable(checked);
+}
+
+function renderTable(data) {
+  let errs=0, warns=0;
+  data.forEach(s => s.issues.forEach(iss => {
+    if (iss.t==='error') errs++; else warns++;
+  }));
+  const nOk  = data.filter(s => s.issues.length === 0).length;
+  const nErr = data.filter(s => s.issues.some(i => i.t==='error')).length;
+  const nWrn = data.filter(s => !s.issues.some(i=>i.t==='error') && s.issues.some(i=>i.t==='warning')).length;
+
+  let html = `
+  <div class="sum-row">
+    <div class="sc"><div class="v">${data.length}</div><div class="l">Total subtitles</div></div>
+    <div class="sc ok"><div class="v">${nOk}</div><div class="l">Clean</div></div>
+    <div class="sc wrn"><div class="v">${nWrn}</div><div class="l">Warnings only</div></div>
+    <div class="sc err"><div class="v">${nErr}</div><div class="l">With errors</div></div>
+  </div>
+  <div class="filters">
+    <button class="fb on" id="fa"  onclick="filt('all',this)">All <span class="bdg" style="background:#E6F1FB;color:#185FA5">${data.length}</span></button>
+    <button class="fb fe" id="fe"  onclick="filt('error',this)">Errors <span class="bdg" style="background:#F7C1C1;color:#791F1F">${errs} in ${nErr} subs</span></button>
+    <button class="fb fw" id="fw"  onclick="filt('warning',this)">Warnings <span class="bdg" style="background:#FAC775;color:#633806">${warns} in ${nWrn} subs</span></button>
+    <button class="fb fo" id="fok" onclick="filt('ok',this)">Clean <span class="bdg" style="background:#C0DD97;color:#27500A">${nOk}</span></button>
+  </div>
+  <div class="tbl-wrap">
+  <table aria-label="Subtitle QC results">
+    <colgroup>
+      <col style="width:38px"><col style="width:108px"><col style="width:108px">
+      <col style="width:48px"><col><col style="width:230px">
+    </colgroup>
+    <thead><tr>
+      <th>#</th><th>In</th><th>Out</th><th>Dur</th><th>Text</th><th>Issues</th>
+    </tr></thead>
+    <tbody>`;
+
+  data.forEach(s => {
+    const hasErr  = s.issues.some(i => i.t==='error');
+    const hasWarn = s.issues.some(i => i.t==='warning');
+    const rc  = hasErr ? 're' : hasWarn ? 'rw' : '';
+    const dur = s.outSec - s.inSec;
+    const tx  = s.isItalic
+      ? `<em style="color:var(--color-text-secondary)">${esc(s.text).replace(/\n/g,'<br>')}</em>`
+      : esc(s.text).replace(/\n/g,'<br>');
+    const tagBadge = s.tags?.length
+      ? `<span style="font-size:9px;color:var(--color-text-secondary);display:block;margin-top:2px">${esc(s.tags.join(', '))}</span>`
+      : '';
+    const issueTags = s.issues.map(iss =>
+      `<span class="tag t${iss.t[0]}">${esc(iss.msg)}</span>`
+    ).join(' ');
+
+    html += `<tr class="${rc}" data-e="${hasErr?1:0}" data-w="${hasWarn?1:0}">
+      <td class="num">${s.idx}</td>
+      <td class="tc">${s2smpte(s.inSec)}</td>
+      <td class="tc">${s2smpte(s.outSec)}</td>
+      <td class="tc">${dur>0 ? dur.toFixed(2) : '—'}</td>
+      <td class="tx">${tx}${tagBadge}</td>
+      <td>${issueTags || '<span style="color:#3B6D11;font-size:11px">✓ ok</span>'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  document.getElementById('out').innerHTML = html;
+}
+
+function filt(type, btn) {
+  curFilter = type;
+  document.querySelectorAll('.fb').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('#out tbody tr').forEach(row => {
+    const e = row.dataset.e==='1', w = row.dataset.w==='1';
+    let show = true;
+    if (type==='error')   show = e;
+    else if (type==='warning') show = w && !e;
+    else if (type==='ok')      show = !e && !w;
+    row.style.display = show ? '' : 'none';
+  });
+}
+</script>
