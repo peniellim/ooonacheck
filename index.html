@@ -2,59 +2,78 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Subtitle Validator</title>
+    <title>JSON Subtitle Checker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
     <style>
         body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
         .container { border: 1px solid #ccc; padding: 1.5rem; border-radius: 8px; }
         .upload-section { margin-bottom: 1.5rem; }
-        #results { margin-top: 1rem; white-space: pre-wrap; background: #f4f4f4; padding: 1rem; }
+        #results { margin-top: 1rem; background: #f9f9f9; padding: 1rem; border: 1px solid #eee; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Subtitle Quality Checker</h1>
+    <h1>Ooona JSON Validator</h1>
     
     <div class="upload-section">
-        <label>1. Upload Ooona (.subs) file:</label>
-        <input type="file" id="subsFile" accept=".subs,.txt">
+        <label>1. Upload .ooona (JSON) file:</label>
+        <input type="file" id="jsonFile" accept=".ooona,.json">
     </div>
 
     <div class="upload-section">
-        <label>2. Upload Guidelines (.txt, .docx, .pdf):</label>
-        <input type="file" id="guidelinesFile" accept=".txt,.docx,.pdf">
+        <label>2. Upload Guidelines (.txt or .docx):</label>
+        <input type="file" id="guideFile" accept=".txt,.docx">
     </div>
 
-    <button onclick="processFiles()">Analyze Subtitles</button>
+    <button onclick="analyzeFiles()">Analyze Subtitles</button>
 
-    <div id="results"></div>
+    <div id="results">Upload files to begin analysis.</div>
 </div>
 
 <script>
-    async function processFiles() {
-        const subsInput = document.getElementById('subsFile').files[0];
-        const guideInput = document.getElementById('guidelinesFile').files[0];
+    async function analyzeFiles() {
+        const jsonInput = document.getElementById('jsonFile').files[0];
+        const guideInput = document.getElementById('guideFile').files[0];
         const resultsDiv = document.getElementById('results');
 
-        if (!subsInput || !guideInput) {
+        if (!jsonInput || !guideInput) {
             alert("Please upload both files.");
             return;
         }
 
-        // Logic for reading text files
-        const readerSubs = new FileReader();
-        const readerGuide = new FileReader();
+        try {
+            // 1. Process JSON
+            const jsonText = await jsonInput.text();
+            const subtitleData = JSON.parse(jsonText);
+            
+            // Adjust 'subtitleArray' based on your actual JSON structure
+            // Example assuming a structure like { "subtitles": [...] }
+            const subtitles = subtitleData.subtitles || subtitleData; 
 
-        readerSubs.onload = (e) => {
-            const subsContent = e.target.result;
-            // Parse Ooona: Split by newline or standard tab-delimited format
-            const lines = subsContent.split('\n');
-            resultsDiv.innerText = "Parsed Subtitle Cells:\n" + lines.join('\n');
-        };
+            // 2. Process Guidelines
+            let guideText = "";
+            if (guideInput.name.endsWith('.docx')) {
+                const arrayBuffer = await guideInput.arrayBuffer();
+                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                guideText = result.value;
+            } else {
+                guideText = await guideInput.text();
+            }
 
-        readerSubs.readAsText(subsInput);
-        // Note: For .docx or .pdf, you would implement a library parser here
-        readerGuide.readAsText(guideInput);
+            // 3. Display Results
+            let output = "<h3>Subtitle List:</h3><ul>";
+            subtitles.forEach((s, index) => {
+                output += `<li><strong>${index + 1}:</strong> ${s.text || s.content || "N/A"}</li>`;
+            });
+            output += "</ul>";
+            
+            resultsDiv.innerHTML = output;
+            console.log("Guidelines loaded for comparison:", guideText);
+            
+        } catch (err) {
+            resultsDiv.innerText = "Error: " + err.message;
+        }
     }
 </script>
 
