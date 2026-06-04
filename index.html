@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>Subtitle QA Tool</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        body { font-family: sans-serif; padding: 20px; }
         .error { color: red; font-weight: bold; background: #fff0f0; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; white-space: pre-wrap; }
         .controls { background: #f4f4f4; padding: 15px; border-radius: 5px; }
     </style>
 </head>
@@ -19,33 +18,34 @@
     <div class="controls">
         <label>1. Upload OOONA File (JSON): </label>
         <input type="file" id="ooonaFile"><br><br>
-        <label>2. Upload Guidelines (DOCX): </label>
+        <label>2. Upload Guidelines (DOCX/PDF): </label>
         <input type="file" id="guidelinesFile">
+        <p><small id="status">Status: Waiting for guidelines...</small></p>
     </div>
 
-    <table id="outputTable">
-        <thead>
-            <tr><th>Index</th><th>Text</th><th>Error / Status</th></tr>
-        </thead>
+    <table>
+        <thead><tr><th>Index</th><th>Text</th><th>Error / Status</th></tr></thead>
         <tbody id="tableBody"></tbody>
     </table>
 
     <script>
-        let guidelinesText = "";
+        let guidelinesText = null;
+        let lastParsedData = null;
 
         document.getElementById('guidelinesFile').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             const arrayBuffer = await file.arrayBuffer();
             const result = await mammoth.extractRawText({arrayBuffer});
             guidelinesText = result.value.toLowerCase();
-            alert("Guidelines loaded!");
+            document.getElementById('status').innerText = "Status: Guidelines Loaded! Ready to process.";
+            if(lastParsedData) renderTable(lastParsedData);
         });
 
         document.getElementById('ooonaFile').addEventListener('change', function(e) {
             const reader = new FileReader();
             reader.onload = function(event) {
-                const data = JSON.parse(event.target.result);
-                renderTable(data.Paragraphs);
+                lastParsedData = JSON.parse(event.target.result).Paragraphs;
+                renderTable(lastParsedData);
             };
             reader.readAsText(e.target.files[0]);
         });
@@ -55,18 +55,27 @@
             tbody.innerHTML = '';
             
             paragraphs.forEach(para => {
-                const text = para.Lines.map(l => l.Text.replace(/<[^>]*>/g, '')).join(' | ');
-                const error = para.QcErrorCode || "";
+                // Preserve line breaks by joining with newline characters
+                const text = para.Lines.map(l => l.Text.replace(/<[^>]*>/g, '')).join('\n');
+                const qcError = para.QcErrorCode || "";
                 
-                // Simple logic: check if guidelines contain common keywords to flag
                 let manualError = "";
-                if (guidelinesText.includes("no periods") && text.includes(".")) manualError = "Period detected (Violation)";
+                // Only run validation if guidelines exist
+                if (guidelinesText) {
+                    if (guidelinesText.includes("no periods") && text.includes(".")) manualError = "Violation: Period found.";
+                    if (guidelinesText.includes("max chars") && text.length > 50) manualError = "Violation: Too many characters.";
+                }
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${para.Index}</td>
                     <td>${text}</td>
-                    <td class="${error || manualError ? 'error' : ''}">${error || manualError || "Clean"}</td>
+                    <td class="${qcError || manualError ? 'error' : ''}">
+                        ${qcError ? 'QC: ' + qcError : ''}
+                        ${qcError && manualError ? '<br>' : ''}
+                        ${manualError ? 'Guideline: ' + manualError : ''}
+                        ${!qcError && !manualError ? 'Clean' : ''}
+                    </td>
                 `;
                 tbody.appendChild(row);
             });
