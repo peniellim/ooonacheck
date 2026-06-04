@@ -2,70 +2,74 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Subtitle Quality Auditor</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <title>Subtitle QA Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; }
-        .box { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .error { color: red; font-weight: bold; background: #fff0f0; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background: #f4f4f4; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .controls { background: #f4f4f4; padding: 15px; border-radius: 5px; }
     </style>
 </head>
 <body>
 
-    <h1>Ooona Subtitle Audit Tool</h1>
-    <div class="box">
-        <label>1. Upload .ooona file:</label><br>
+    <h2>OOONA Subtitle Validator</h2>
+    <div class="controls">
+        <label>1. Upload OOONA File (JSON): </label>
         <input type="file" id="ooonaFile"><br><br>
-        <label>2. Upload Guidelines (.docx, .pdf, .txt):</label><br>
-        <input type="file" id="guideFile">
+        <label>2. Upload Guidelines (DOCX): </label>
+        <input type="file" id="guidelinesFile">
     </div>
-    <button onclick="processFiles()">Parse and Audit</button>
-    <div id="resultArea"></div>
+
+    <table id="outputTable">
+        <thead>
+            <tr><th>Index</th><th>Text</th><th>Error / Status</th></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
 
     <script>
-        async function processFiles() {
-            const file = document.getElementById('ooonaFile').files[0];
-            const resultArea = document.getElementById('resultArea');
-            if (!file) return alert("Upload an Ooona file");
+        let guidelinesText = "";
 
-            const text = await file.text();
-            const data = JSON.parse(text);
+        document.getElementById('guidelinesFile').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({arrayBuffer});
+            guidelinesText = result.value.toLowerCase();
+            alert("Guidelines loaded!");
+        });
 
-            // LOGIC: Find the array that is NOT "Warnings"
-            let subs = null;
-            let keyName = "";
+        document.getElementById('ooonaFile').addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const data = JSON.parse(event.target.result);
+                renderTable(data.Paragraphs);
+            };
+            reader.readAsText(e.target.files[0]);
+        });
 
-            for (let k in data) {
-                if (Array.isArray(data[k]) && k !== "Warnings" && data[k].length > 0) {
-                    subs = data[k];
-                    keyName = k;
-                    break;
-                }
-            }
-
-            if (!subs) {
-                resultArea.innerHTML = "<h3>Error: Could not find subtitle data.</h3><p>Keys found: " + Object.keys(data).join(', ') + "</p>";
-                return;
-            }
-
-            let html = `<h3>Detected Subtitles in key: "${keyName}"</h3>`;
-            html += `<table><tr><th>Start</th><th>End</th><th>Text</th><th>Status</th></tr>`;
+        function renderTable(paragraphs) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
             
-            subs.forEach(s => {
-                // Mapping typical Ooona keys
-                const start = s.start || s.startTime || s.start_time || "";
-                const end = s.end || s.endTime || s.end_time || "";
-                const content = s.text || s.content || s.translation || "";
+            paragraphs.forEach(para => {
+                const text = para.Lines.map(l => l.Text.replace(/<[^>]*>/g, '')).join(' | ');
+                const error = para.QcErrorCode || "";
                 
-                html += `<tr><td>${start}</td><td>${end}</td><td>${content}</td><td>Pending</td></tr>`;
+                // Simple logic: check if guidelines contain common keywords to flag
+                let manualError = "";
+                if (guidelinesText.includes("no periods") && text.includes(".")) manualError = "Period detected (Violation)";
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${para.Index}</td>
+                    <td>${text}</td>
+                    <td class="${error || manualError ? 'error' : ''}">${error || manualError || "Clean"}</td>
+                `;
+                tbody.appendChild(row);
             });
-            
-            html += `</table>`;
-            resultArea.innerHTML = html;
         }
     </script>
 </body>
