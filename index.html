@@ -4,78 +4,79 @@
     <meta charset="UTF-8">
     <title>Subtitle Quality Auditor</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 20px; line-height: 1.6; }
-        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        .error { background-color: #ffcccc; color: #d8000c; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; line-height: 1.5; }
+        .upload-area { display: flex; gap: 20px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f0f0f0; }
+        .error-row { background-color: #fff0f0; }
+        .error-text { color: red; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>Subtitle Audit Tool</h1>
+    <h1>Ooona Subtitle Audit Tool</h1>
 
-    <div class="grid-container">
+    <div class="upload-area">
         <div>
-            <label>1. Upload .ooona (JSON):</label>
-            <input type="file" id="jsonInput" accept=".json">
+            <label>1. Upload .ooona (JSON format):</label><br>
+            <input type="file" id="ooonaInput" accept=".ooona">
         </div>
         <div>
-            <label>2. Upload Guidelines (docx, pdf, txt):</label>
-            <input type="file" id="guideInput">
+            <label>2. Upload Guidelines (.txt, .docx):</label><br>
+            <input type="file" id="guideInput" accept=".txt,.docx">
         </div>
     </div>
 
-    <button onclick="processAudit()" style="margin-top: 20px; padding: 10px 20px;">Run Audit</button>
+    <button onclick="runAudit()">Process and Audit</button>
 
-    <div id="resultArea"></div>
+    <div id="output"></div>
 
     <script>
-        async function processAudit() {
-            const jsonFile = document.getElementById('jsonInput').files[0];
+        async function runAudit() {
+            const ooonaFile = document.getElementById('ooonaInput').files[0];
             const guideFile = document.getElementById('guideInput').files[0];
 
-            if (!jsonFile || !guideFile) return alert("Please upload both files.");
+            if (!ooonaFile || !guideFile) return alert("Please select both files.");
 
-            // 1. Load JSON Subtitles
-            const jsonText = await jsonFile.text();
-            const subtitles = JSON.parse(jsonText); 
+            // Parse .ooona JSON
+            const ooonaText = await ooonaFile.text();
+            const data = JSON.parse(ooonaText);
             
-            // 2. Load Guidelines (Simplified text extraction)
-            let guidelines = await extractTextFromDoc(guideFile);
+            // Extract Guidelines
+            const guidelines = await readGuidelines(guideFile);
 
-            // 3. Render Table
-            renderSubtitleTable(subtitles, guidelines);
+            // Display in Table
+            displayTable(data.events || data, guidelines);
         }
 
-        async function extractTextFromDoc(file) {
-            // This function acts as a router for different file types
-            if (file.name.endsWith('.txt')) return await file.text();
+        async function readGuidelines(file) {
             if (file.name.endsWith('.docx')) {
                 const arrayBuffer = await file.arrayBuffer();
                 const result = await mammoth.extractRawText({arrayBuffer});
                 return result.value;
             }
-            return "Guidelines loaded (Binary format detected).";
+            return await file.text();
         }
 
-        function renderSubtitleTable(data, guidelines) {
-            let html = `<table><tr><th>Start</th><th>End</th><th>Text</th><th>Status</th></tr>`;
-            data.forEach(sub => {
-                // Example Logic: Simple check if sub exceeds a hypothetical length constraint
-                const hasError = sub.text.length > 40; 
-                html += `<tr>
+        function displayTable(subtitles, rules) {
+            let html = `<table><tr><th>Start</th><th>End</th><th>Subtitle Text</th><th>Audit Status</th></tr>`;
+            
+            subtitles.forEach(sub => {
+                // ADD YOUR CUSTOM LOGIC HERE: e.g., check sub.text against rules
+                const isError = sub.text.includes("bad-word"); 
+                
+                html += `<tr class="${isError ? 'error-row' : ''}">
                     <td>${sub.start}</td>
                     <td>${sub.end}</td>
                     <td>${sub.text}</td>
-                    <td class="${hasError ? 'error' : ''}">${hasError ? 'Length Warning' : 'OK'}</td>
+                    <td class="${isError ? 'error-text' : ''}">${isError ? 'Violation found' : 'Pass'}</td>
                 </tr>`;
             });
+            
             html += `</table>`;
-            document.getElementById('resultArea').innerHTML = html;
+            document.getElementById('output').innerHTML = html;
         }
     </script>
 </body>
