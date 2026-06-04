@@ -2,107 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Subtitle Quality Auditor</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <title>Subtitle Debugger</title>
     <style>
         body { font-family: sans-serif; padding: 20px; }
-        .upload-box { border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background: #f4f4f4; }
-        .error-msg { color: #d8000c; padding: 10px; border: 1px solid; margin-top: 10px; }
+        .debug-box { background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; margin-bottom: 20px; }
+        pre { background: #f8f9fa; padding: 10px; border: 1px solid #dee2e6; overflow: auto; }
     </style>
 </head>
 <body>
-
-    <h1>Ooona Subtitle Audit Tool</h1>
-
-    <div class="upload-box">
-        <label><strong>1. Upload .ooona (JSON):</strong></label><br>
-        <input type="file" id="ooonaFile" accept=".ooona,.json"><br><br>
-        <label><strong>2. Upload Guidelines (.docx, .pdf, .txt):</strong></label><br>
-        <input type="file" id="guideFile" accept=".docx,.pdf,.txt">
-    </div>
-
-    <button onclick="processFiles()" style="padding: 10px 20px;">Parse and Audit</button>
-
-    <div id="resultArea"></div>
+    <h1>Ooona Structure Debugger</h1>
+    <input type="file" id="ooonaFile" accept=".ooona,.json">
+    <button onclick="debugFile()">Inspect File Structure</button>
+    <div id="debugArea"></div>
 
     <script>
-        async function processFiles() {
-            const ooonaFile = document.getElementById('ooonaFile').files[0];
-            const guideFile = document.getElementById('guideFile').files[0];
-            const resultArea = document.getElementById('resultArea');
+        async function debugFile() {
+            const file = document.getElementById('ooonaFile').files[0];
+            if (!file) return alert("Select a file");
+            
+            const text = await file.text();
+            const data = JSON.parse(text);
+            const debugArea = document.getElementById('debugArea');
 
-            if (!ooonaFile || !guideFile) return alert("Please upload both files.");
-
-            try {
-                const ooonaText = await ooonaFile.text();
-                const data = JSON.parse(ooonaText);
-                
-                // 1. Robust Array Search
-                let subtitles = Array.isArray(data) ? data : null;
-                if (!subtitles) {
-                    for (let key in data) {
-                        if (data[key] && Array.isArray(data[key])) {
-                            subtitles = data[key];
-                            break;
-                        }
-                    }
-                }
-
-                if (!subtitles || subtitles.length === 0) throw new Error("No subtitle list found in this file.");
-
-                // 2. Identify the Text property
-                const sample = subtitles.find(s => typeof s === 'object' && s !== null);
-                if (!sample) throw new Error("File content format is not recognized.");
-                
-                // Find property that looks like text
-                const textKey = Object.keys(sample).find(k => 
-                    ['text', 'content', 'c', 't', 'sub', 'translation'].includes(k.toLowerCase())
-                ) || Object.keys(sample)[Object.keys(sample).length - 1]; 
-
-                const guidelinesText = await extractText(guideFile);
-                renderTable(subtitles, textKey, guidelinesText);
-
-            } catch (err) {
-                resultArea.innerHTML = `<div class="error-msg"><strong>Audit Error:</strong> ${err.message}<br><small>If the file is valid, please check the console (F12) for structure details.</small></div>`;
-                console.error(err);
-            }
-        }
-
-        async function extractText(file) {
-            const ext = file.name.split('.').pop().toLowerCase();
-            if (ext === 'docx') {
-                const result = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
-                return result.value;
-            } 
-            if (ext === 'pdf') {
-                const pdf = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
-                let text = "";
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    text += content.items.map(item => item.str).join(" ");
-                }
-                return text;
-            }
-            return await file.text();
-        }
-
-        function renderTable(subs, textKey, rules) {
-            let html = `<table><tr><th>Start</th><th>End</th><th>Text (key: ${textKey})</th></tr>`;
-            subs.forEach(s => {
-                // Defensive check: ensure s is an object
-                if (typeof s === 'object' && s !== null) {
-                    const content = s[textKey] || s.text || "---";
-                    html += `<tr><td>${s.start || ""}</td><td>${s.end || ""}</td><td>${content}</td></tr>`;
-                }
-            });
-            html += `</table>`;
-            document.getElementById('resultArea').innerHTML = html;
+            let output = `<h3>File Keys Detected:</h3><p>${Object.keys(data).join(', ')}</p>`;
+            output += `<h3>Raw Preview (First 500 chars):</h3><pre>${text.substring(0, 500)}</pre>`;
+            
+            debugArea.innerHTML = output;
         }
     </script>
 </body>
